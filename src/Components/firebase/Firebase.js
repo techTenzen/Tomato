@@ -5,13 +5,12 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { doc, getDoc } from 'firebase/firestore';
 const firebaseConfig = {
-  apiKey: "AIzaSyBwlGNbJegj4BxrLMdkE5YugRS0nfMcE48",
-  authDomain: "fost---food-street.firebaseapp.com",
-  projectId: "fost---food-street",
-  storageBucket: "fost---food-street.appspot.com",
-  messagingSenderId: "1036530834692",
-  appId: "1:1036530834692:web:bf2dfcfb8fd3ab1f29c451",
-  measurementId: "G-LYETE6N9P6"
+  apiKey: "AIzaSyAKvWp2fvwRgoSoLKPHXlS0zpL9z0wjZHE",
+  authDomain: "rentals-5085c.firebaseapp.com",
+  projectId: "rentals-5085c",
+  storageBucket: "rentals-5085c.appspot.com",
+  messagingSenderId: "649476082243",
+  appId: "1:649476082243:web:6c47a0fb65d72e5ac5a2f6"
 };
 
 export const app = initializeApp(firebaseConfig);

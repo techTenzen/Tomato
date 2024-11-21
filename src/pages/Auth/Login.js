@@ -10,7 +10,10 @@ import {
   useToast, 
   FormControl, 
   FormErrorMessage, 
-  Divider 
+  Divider,
+  Alert,
+  AlertIcon,
+  AlertDescription
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -30,10 +33,9 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
   const toast = useToast();
   const navigate = useNavigate();
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
 
   const saveUserToLocalStorage = async (user) => {
     try {
@@ -60,12 +62,18 @@ const Login = () => {
 
   const handleSignIn = async (signInMethod) => {
     setIsLoading(true);
-    setEmailError('');
-    setPasswordError('');
+    setLoginError('');
 
     try {
       let userCredential;
       if (signInMethod === 'email') {
+        // Validate email and password before attempting sign in
+        if (!email || !password) {
+          setLoginError('Please enter both email and password');
+          setIsLoading(false);
+          return;
+        }
+
         userCredential = await signInWithEmailAndPassword(auth, email, password);
       } else {
         const provider = new GoogleAuthProvider();
@@ -93,19 +101,33 @@ const Login = () => {
           navigate('/');
       }
     } catch (error) {
+      console.error('Login error:', error);
+      
+      // Specific error handling for different types of login failures
+      switch(error.code) {
+        case 'auth/invalid-credential':
+          setLoginError('Invalid email or password. Please try again.');
+          break;
+        case 'auth/user-not-found':
+          setLoginError('No account found with this email. Please register.');
+          break;
+        case 'auth/wrong-password':
+          setLoginError('Incorrect password. Please try again.');
+          break;
+        case 'auth/too-many-requests':
+          setLoginError('Too many failed attempts. Please try again later.');
+          break;
+        default:
+          setLoginError('Login failed. Please try again.');
+      }
+
       toast({
         title: 'Login Error',
-        description: error.message,
+        description: loginError,
         status: 'error',
         duration: 3000,
         isClosable: true,
       });
-
-      if (error.message.includes('email')) {
-        setEmailError(error.message);
-      } else if (error.message.includes('password')) {
-        setPasswordError(error.message);
-      }
     } finally {
       setIsLoading(false);
     }
@@ -118,11 +140,19 @@ const Login = () => {
           Login
         </Heading>
         <Text mb={6} color="gray.500">To get started</Text>
+        
+        {loginError && (
+          <Alert status="error" mb={4} borderRadius="md">
+            <AlertIcon />
+            <AlertDescription>{loginError}</AlertDescription>
+          </Alert>
+        )}
+
         <form onSubmit={(e) => {
           e.preventDefault();
           handleSignIn('email');
         }}>
-          <FormControl isInvalid={!!emailError} mb={4}>
+          <FormControl mb={4}>
             <Input
               placeholder="Email"
               value={email}
@@ -133,9 +163,8 @@ const Login = () => {
               height="50px"
               _placeholder={{ color: 'gray.500' }}
             />
-            {emailError && <FormErrorMessage>{emailError}</FormErrorMessage>}
           </FormControl>
-          <FormControl isInvalid={!!passwordError} mb={2}>
+          <FormControl mb={2}>
             <Input
               type="password"
               placeholder="Password"
@@ -147,7 +176,6 @@ const Login = () => {
               height="50px"
               _placeholder={{ color: 'gray.500' }}
             />
-            {passwordError && <FormErrorMessage>{passwordError}</FormErrorMessage>}
           </FormControl>
           <Button 
             colorScheme="blue" 

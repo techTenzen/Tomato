@@ -9,38 +9,51 @@ import {
   Progress,
   Button,
   Alert,
-  AlertIcon
+  AlertIcon,
+  Flex,
+  Icon,
+  useBreakpointValue
 } from '@chakra-ui/react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getFirestore, doc, onSnapshot } from 'firebase/firestore';
+import { 
+  CheckCircle, 
+  Clock, 
+  ShoppingBag,
+  XCircle 
+} from 'lucide-react';
 
 const OrderWaitingPage = () => {
   const [orderStatus, setOrderStatus] = useState('pending');
   const [isReadyForPickup, setIsReadyForPickup] = useState(false);
+  const [isCancelled, setIsCancelled] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const firestore = getFirestore();
 
-  // Get order ID from location state or previous navigation
+  // Responsive sizing
+  const headingSize = useBreakpointValue({ base: 'lg', md: 'xl' });
+  const containerPadding = useBreakpointValue({ base: 4, md: 8 });
+  const iconSize = useBreakpointValue({ base: 8, md: 10 });
+
   const orderId = location.state?.orderId;
 
   useEffect(() => {
     if (!orderId) {
-      navigate('/'); // Redirect if no order ID
+      navigate('/');
       return;
     }
 
-    // Set up real-time listener for order status
     const orderRef = doc(firestore, 'orders', orderId);
     const unsubscribe = onSnapshot(orderRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const orderData = docSnapshot.data();
         setOrderStatus(orderData.status);
         setIsReadyForPickup(orderData.status === 'completed');
+        setIsCancelled(orderData.status === 'cancelled');
       }
     });
 
-    // Cleanup subscription
     return () => unsubscribe();
   }, [orderId, firestore, navigate]);
 
@@ -48,31 +61,53 @@ const OrderWaitingPage = () => {
     navigate('/order-confirmation', { state: { orderId } });
   };
 
+  const handleBackToHome = () => {
+    navigate('/'); // or wherever you want to redirect after cancellation
+  };
+
   const getStatusDetails = () => {
+    if (isCancelled) {
+      return {
+        description: 'Order Cancelled',
+        progressValue: 0,
+        message: 'Unfortunately, this order has been cancelled by the vendor.',
+        icon: XCircle,
+        color: 'red'
+      };
+    }
+
     switch(orderStatus) {
       case 'pending':
         return {
           description: 'Order Accepted by Store',
           progressValue: 30,
-          message: 'Your order has been received and is being reviewed by the store'
+          message: 'Your order has been received and is being reviewed by the store',
+          icon: Clock,
+          color: 'blue'
         };
       case 'processing':
         return {
           description: 'Order Being Prepared',
           progressValue: 70,
-          message: 'Your order is currently being prepared by our staff'
+          message: 'Your order is currently being prepared by our staff',
+          icon: ShoppingBag,
+          color: 'orange'
         };
       case 'completed':
         return {
           description: 'Order Ready for Pickup',
           progressValue: 100,
-          message: 'Your order is complete and ready to collect'
+          message: 'Your order is complete and ready to collect',
+          icon: CheckCircle,
+          color: 'green'
         };
       default:
         return {
           description: 'Processing Order',
           progressValue: 50,
-          message: 'Your order is being processed'
+          message: 'Your order is being processed',
+          icon: Clock,
+          color: 'gray'
         };
     }
   };
@@ -80,30 +115,119 @@ const OrderWaitingPage = () => {
   const statusDetails = getStatusDetails();
 
   return (
-    <Container maxW="container.xl" py={8}>
-      <VStack spacing={8} align="stretch">
-        <Heading textAlign="center">Order Status</Heading>
+    <Container 
+      maxW="container.sm" // Changed to sm for better mobile view
+      py={containerPadding} 
+      bg="gray.50" 
+      minHeight="100vh"
+      px={containerPadding} // Added responsive padding
+    >
+      <VStack 
+        spacing={{ base: 6, md: 8 }} // Responsive spacing
+        align="stretch" 
+        bg="white" 
+        p={{ base: 4, md: 8 }} // Responsive padding
+        borderRadius="xl" 
+        boxShadow="xl"
+      >
+        <Flex 
+          alignItems="center" 
+          justifyContent="center" 
+          mb={{ base: 2, md: 4 }} // Responsive margin
+        >
+          <Icon 
+            as={statusDetails.icon} 
+            w={iconSize} 
+            h={iconSize} 
+            color={`${statusDetails.color}.500`} 
+            mr={{ base: 2, md: 4 }} // Responsive margin
+          />
+          <Heading 
+            textAlign="center" 
+            color="gray.700"
+            size={headingSize}
+          >
+            Order Status
+          </Heading>
+        </Flex>
 
-        {isReadyForPickup ? (
+        {isCancelled ? (
           <Alert
-            status="success"
-            variant="solid"
+            status="error"
+            variant="subtle"
             flexDirection="column"
             alignItems="center"
             justifyContent="center"
             textAlign="center"
-            height="200px"
+            height={{ base: "200px", md: "250px" }}
+            borderRadius="xl"
           >
-            <AlertIcon boxSize="40px" mr={0} />
-            <Heading size="lg" mb={4}>
+            <AlertIcon boxSize={{ base: "40px", md: "50px" }} mr={0} />
+            <Heading 
+              size={{ base: "md", md: "lg" }} 
+              mb={4} 
+              color="red.600"
+            >
+              Order Cancelled
+            </Heading>
+            <Text 
+              fontSize={{ base: "sm", md: "md" }} 
+              mb={6} 
+              color="gray.600"
+            >
+              Unfortunately, this order has been cancelled by the vendor.
+            </Text>
+            <Button
+              colorScheme="red"
+              size={{ base: "md", md: "lg" }}
+              borderRadius="full"
+              px={{ base: 6, md: 8 }}
+              boxShadow="md"
+              _hover={{
+                transform: 'translateY(-2px)',
+                boxShadow: 'lg'
+              }}
+              onClick={handleBackToHome}
+            >
+              Back to Home
+            </Button>
+          </Alert>
+        ) : isReadyForPickup ? (
+          <Alert
+            status="success"
+            variant="subtle"
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            textAlign="center"
+            height={{ base: "200px", md: "250px" }}
+            borderRadius="xl"
+          >
+            <AlertIcon boxSize={{ base: "40px", md: "50px" }} mr={0} />
+            <Heading 
+              size={{ base: "md", md: "lg" }} 
+              mb={4} 
+              color="green.600"
+            >
               Order is Ready for Pickup!
             </Heading>
-            <Text fontSize="md" mb={4}>
+            <Text 
+              fontSize={{ base: "sm", md: "md" }} 
+              mb={6} 
+              color="gray.600"
+            >
               Your order from the vendor is now complete and ready to be collected.
             </Text>
             <Button
               colorScheme="green"
-              size="lg"
+              size={{ base: "md", md: "lg" }}
+              borderRadius="full"
+              px={{ base: 6, md: 8 }}
+              boxShadow="md"
+              _hover={{
+                transform: 'translateY(-2px)',
+                boxShadow: 'lg'
+              }}
               onClick={handlePickup}
             >
               Proceed to Pickup
@@ -111,23 +235,44 @@ const OrderWaitingPage = () => {
           </Alert>
         ) : (
           <>
-            <Box textAlign="center">
-              <Spinner size="xl" color="blue.500" thickness="4px" />
-              <Text mt={4} fontSize="lg">
+            <Flex 
+              flexDirection="column" 
+              alignItems="center" 
+              textAlign="center" 
+              mb={{ base: 4, md: 6 }}
+            >
+              <Spinner 
+                size={{ base: "lg", md: "xl" }}
+                color={`${statusDetails.color}.500`} 
+                thickness="4px"
+                speed="0.8s"
+                emptyColor="gray.200"
+              />
+              <Text 
+                mt={{ base: 2, md: 4 }}
+                fontSize={{ base: "md", md: "lg" }}
+                fontWeight="semibold" 
+                color="gray.700"
+              >
                 {statusDetails.description}
               </Text>
-            </Box>
+            </Flex>
 
             <Progress
               value={statusDetails.progressValue}
               size="lg"
-              colorScheme="blue"
+              colorScheme={statusDetails.color}
               hasStripe
               isAnimated
+              borderRadius="full"
             />
 
-            <Box textAlign="center">
-              <Text fontSize="md" color="gray.600">
+            <Box textAlign="center" mt={{ base: 2, md: 4 }}>
+              <Text 
+                fontSize={{ base: "sm", md: "md" }}
+                color="gray.500" 
+                fontStyle="italic"
+              >
                 {statusDetails.message}
               </Text>
             </Box>

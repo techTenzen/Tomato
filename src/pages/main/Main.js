@@ -15,6 +15,7 @@ import {
 import { Link } from "react-router-dom";
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { app } from '../../Components/firebase/Firebase';
+import Footer from "../../Components/footer/Footer";
 
 const ShopCard = ({ shop }) => (
   <Link to={`/shop/${shop.id}`}>
@@ -188,6 +189,7 @@ const Main = () => {
       </Container>
     </Box>
   );
+  <Footer/>
 };
 
 export default Main;

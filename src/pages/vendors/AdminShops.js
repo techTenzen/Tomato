@@ -18,16 +18,20 @@ import {
   ModalCloseButton
 } from '@chakra-ui/react';
 import { getFirestore, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { app } from '../../Components/firebase/Firebase';
 
 const AdminShops = () => {
   const [shopName, setShopName] = useState('');
-  const [shopImageUrl, setShopImageUrl] = useState('');
+  const [shopImage, setShopImage] = useState(null);
+  const [shopImagePreview, setShopImagePreview] = useState('');
   const [shops, setShops] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const firestore = getFirestore(app);
+  const storage = getStorage(app);
   const toast = useToast();
 
   // Load and validate user on component mount
@@ -40,7 +44,7 @@ const AdminShops = () => {
         }
 
         const user = JSON.parse(userStr);
-        if (!user || !user.uid) { // Changed from id to uid as Firebase typically uses uid
+        if (!user || !user.uid) {
           throw new Error('Invalid user data');
         }
 
@@ -100,6 +104,66 @@ const AdminShops = () => {
     }
   }, [currentUser]);
 
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type and size
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      const maxSize = 5 * 1024 * 1024; // 5MB
+
+      if (!validTypes.includes(file.type)) {
+        toast({
+          title: 'Invalid File Type',
+          description: 'Please upload a JPEG, PNG, or GIF image',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      if (file.size > maxSize) {
+        toast({
+          title: 'File Too Large',
+          description: 'Image must be smaller than 5MB',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      setShopImage(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setShopImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const uploadShopImage = async () => {
+    if (!shopImage || !currentUser?.uid) return null;
+
+    try {
+      const storageRef = ref(storage, `shops/${currentUser.uid}/${Date.now()}_${shopImage.name}`);
+      const snapshot = await uploadBytes(storageRef, shopImage);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      return downloadURL;
+    } catch (error) {
+      toast({
+        title: 'Image Upload Failed',
+        description: error.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return null;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -114,7 +178,7 @@ const AdminShops = () => {
       return;
     }
 
-    if (!shopName || !shopImageUrl) {
+    if (!shopName || !shopImage) {
       toast({
         title: 'Error',
         description: 'Please fill all fields',
@@ -126,11 +190,20 @@ const AdminShops = () => {
     }
 
     try {
+      setIsUploading(true);
+      // Upload image first
+      const shopImageUrl = await uploadShopImage();
+      
+      if (!shopImageUrl) {
+        setIsUploading(false);
+        return;
+      }
+
       const shopsRef = collection(firestore, 'shops');
       const newShopData = {
         name: shopName,
         imageUrl: shopImageUrl,
-        vendorId: currentUser.uid, // Using uid instead of id
+        vendorId: currentUser.uid,
         createdAt: new Date()
       };
 
@@ -149,8 +222,10 @@ const AdminShops = () => {
         isClosable: true,
       });
 
+      // Reset form
       setShopName('');
-      setShopImageUrl('');
+      setShopImage(null);
+      setShopImagePreview('');
       fetchVendorShops();
       setIsModalOpen(false);
     } catch (error) {
@@ -161,10 +236,11 @@ const AdminShops = () => {
         duration: 3000,
         isClosable: true,
       });
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  // Rest of the component remains the same
   return (
     <Box p={6}>
       <VStack spacing={6} align="stretch">
@@ -219,18 +295,39 @@ const AdminShops = () => {
                   </FormControl>
 
                   <FormControl isRequired>
-                    <FormLabel>Shop Image URL</FormLabel>
+                    <FormLabel>Shop Image</FormLabel>
                     <Input 
-                      value={shopImageUrl}
-                      onChange={(e) => setShopImageUrl(e.target.value)}
-                      placeholder="Enter image URL"
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif"
+                      onChange={handleImageChange}
+                      sx={{
+                        '::file-selector-button': {
+                          height: '40px',
+                          padding: '0 15px',
+                          mr: 4,
+                          bg: 'gray.200',
+                          borderRadius: 'md',
+                          cursor: 'pointer'
+                        }
+                      }}
                     />
+                    {shopImagePreview && (
+                      <Image 
+                        src={shopImagePreview} 
+                        alt="Shop Preview" 
+                        mt={4} 
+                        maxH="200px" 
+                        objectFit="cover" 
+                      />
+                    )}
                   </FormControl>
 
                   <Button 
                     colorScheme="blue" 
                     type="submit" 
                     width="full"
+                    isLoading={isUploading}
+                    loadingText="Adding Shop..."
                   >
                     Add Shop
                   </Button>
