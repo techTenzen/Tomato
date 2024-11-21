@@ -12,8 +12,15 @@ import {
   AlertIcon,
   Flex,
   Icon,
-  useBreakpointValue
+  useBreakpointValue,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody
 } from '@chakra-ui/react';
+import { QRCodeSVG } from 'qrcode.react'; // Updated import
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getFirestore, doc, onSnapshot } from 'firebase/firestore';
 import { 
@@ -27,6 +34,7 @@ const OrderWaitingPage = () => {
   const [orderStatus, setOrderStatus] = useState('pending');
   const [isReadyForPickup, setIsReadyForPickup] = useState(false);
   const [isCancelled, setIsCancelled] = useState(false);
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const firestore = getFirestore();
@@ -63,6 +71,14 @@ const OrderWaitingPage = () => {
 
   const handleBackToHome = () => {
     navigate('/'); // or wherever you want to redirect after cancellation
+  };
+
+  const handleOpenQRModal = () => {
+    setIsQRModalOpen(true);
+  };
+
+  const handleCloseQRModal = () => {
+    setIsQRModalOpen(false);
   };
 
   const getStatusDetails = () => {
@@ -116,31 +132,31 @@ const OrderWaitingPage = () => {
 
   return (
     <Container 
-      maxW="container.sm" // Changed to sm for better mobile view
+      maxW="container.sm"
       py={containerPadding} 
       bg="gray.50" 
       minHeight="100vh"
-      px={containerPadding} // Added responsive padding
+      px={containerPadding}
     >
       <VStack 
-        spacing={{ base: 6, md: 8 }} // Responsive spacing
+        spacing={{ base: 6, md: 8 }}
         align="stretch" 
         bg="white" 
-        p={{ base: 4, md: 8 }} // Responsive padding
+        p={{ base: 4, md: 8 }}
         borderRadius="xl" 
         boxShadow="xl"
       >
         <Flex 
           alignItems="center" 
           justifyContent="center" 
-          mb={{ base: 2, md: 4 }} // Responsive margin
+          mb={{ base: 2, md: 4 }}
         >
           <Icon 
             as={statusDetails.icon} 
             w={iconSize} 
             h={iconSize} 
             color={`${statusDetails.color}.500`} 
-            mr={{ base: 2, md: 4 }} // Responsive margin
+            mr={{ base: 2, md: 4 }}
           />
           <Heading 
             textAlign="center" 
@@ -193,46 +209,99 @@ const OrderWaitingPage = () => {
             </Button>
           </Alert>
         ) : isReadyForPickup ? (
-          <Alert
-            status="success"
-            variant="subtle"
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            textAlign="center"
-            height={{ base: "200px", md: "250px" }}
-            borderRadius="xl"
-          >
-            <AlertIcon boxSize={{ base: "40px", md: "50px" }} mr={0} />
-            <Heading 
-              size={{ base: "md", md: "lg" }} 
-              mb={4} 
-              color="green.600"
+          <>
+            <Alert
+              status="success"
+              variant="subtle"
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              textAlign="center"
+              height={{ base: "200px", md: "250px" }}
+              borderRadius="xl"
             >
-              Order is Ready for Pickup!
-            </Heading>
-            <Text 
-              fontSize={{ base: "sm", md: "md" }} 
-              mb={6} 
-              color="gray.600"
+              <AlertIcon boxSize={{ base: "40px", md: "50px" }} mr={0} />
+              <Heading 
+                size={{ base: "md", md: "lg" }} 
+                mb={4} 
+                color="green.600"
+              >
+                Order is Ready for Pickup!
+              </Heading>
+              <Text 
+                fontSize={{ base: "sm", md: "md" }} 
+                mb={6} 
+                color="gray.600"
+              >
+                Your order from the vendor is now complete and ready to be collected.
+              </Text>
+              <Flex gap={4}>
+                <Button
+                  colorScheme="green"
+                  size={{ base: "md", md: "lg" }}
+                  borderRadius="full"
+                  px={{ base: 6, md: 8 }}
+                  boxShadow="md"
+                  _hover={{
+                    transform: 'translateY(-2px)',
+                    boxShadow: 'lg'
+                  }}
+                  onClick={handlePickup}
+                >
+                  Proceed to Pickup
+                </Button>
+                <Button
+                  colorScheme="blue"
+                  size={{ base: "md", md: "lg" }}
+                  borderRadius="full"
+                  px={{ base: 6, md: 8 }}
+                  boxShadow="md"
+                  _hover={{
+                    transform: 'translateY(-2px)',
+                    boxShadow: 'lg'
+                  }}
+                  onClick={handleOpenQRModal}
+                >
+                  View QR Code
+                </Button>
+              </Flex>
+            </Alert>
+
+            <Modal 
+              isOpen={isQRModalOpen} 
+              onClose={handleCloseQRModal} 
+              size={{ base: "sm", md: "md" }}
+              isCentered
             >
-              Your order from the vendor is now complete and ready to be collected.
-            </Text>
-            <Button
-              colorScheme="green"
-              size={{ base: "md", md: "lg" }}
-              borderRadius="full"
-              px={{ base: 6, md: 8 }}
-              boxShadow="md"
-              _hover={{
-                transform: 'translateY(-2px)',
-                boxShadow: 'lg'
-              }}
-              onClick={handlePickup}
-            >
-              Proceed to Pickup
-            </Button>
-          </Alert>
+              <ModalOverlay />
+              <ModalContent>
+                <ModalHeader>Order Pickup QR Code</ModalHeader>
+                <ModalCloseButton />
+                <ModalBody 
+                  display="flex" 
+                  flexDirection="column" 
+                  alignItems="center" 
+                  justifyContent="center" 
+                  p={6}
+                >
+                  <QRCodeSVG
+                    value={`order-pickup:${orderId}`} 
+                    size={256} 
+                    level={'H'} 
+                    includeMargin={true}
+                  />
+                  <Text 
+                    mt={4} 
+                    textAlign="center" 
+                    color="gray.600" 
+                    fontSize="sm"
+                  >
+                    Show this QR code to the staff for order pickup
+                  </Text>
+                </ModalBody>
+              </ModalContent>
+            </Modal>
+          </>
         ) : (
           <>
             <Flex 

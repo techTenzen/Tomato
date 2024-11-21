@@ -1,4 +1,3 @@
-// VendorOrders.js
 import React, { useState, useEffect } from 'react';
 import {
   Container,
@@ -16,11 +15,19 @@ import {
   useToast,
   Stack,
   Select,
-  HStack
+  HStack,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  ModalFooter
 } from '@chakra-ui/react';
+import { Scanner } from '@yudiel/react-qr-scanner';
 import { getFirestore, collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 
-// Helper functions defined outside the component
+// Helper functions
 const formatDate = (date) => {
   if (!date) return '';
   return new Intl.DateTimeFormat('en-US', {
@@ -38,13 +45,14 @@ const getStatusColor = (status) => {
     pending: 'yellow',
     processing: 'blue',
     completed: 'green',
-    cancelled: 'red'
+    cancelled: 'red',
+    picked_up: 'purple'
   };
   return colors[status] || 'gray';
 };
 
-// Define OrderCard component separately
-const OrderCard = ({ order, updateOrderStatus }) => (
+// OrderCard component
+const OrderCard = ({ order, updateOrderStatus, onCompleteOrder }) => (
   <Box
     borderWidth="1px"
     borderRadius="lg"
@@ -60,7 +68,7 @@ const OrderCard = ({ order, updateOrderStatus }) => (
           p={2}
           borderRadius="md"
         >
-          {order.status.toUpperCase()}
+          {order.status.toUpperCase().replace('_', ' ')}
         </Badge>
         <Text fontSize="sm" color="gray.600">
           {formatDate(order.createdAt)}
@@ -95,7 +103,15 @@ const OrderCard = ({ order, updateOrderStatus }) => (
         </Text>
       </HStack>
 
-      {order.status !== 'completed' && order.status !== 'cancelled' && (
+      {order.status === 'completed' && (
+        <Box>
+          <Text fontWeight="bold" color="blue.600">
+            Pickup Code: {order.pickupCode}
+          </Text>
+        </Box>
+      )}
+
+      {order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'picked_up' && (
         <HStack spacing={4}>
           {order.status === 'pending' && (
             <Button
@@ -107,34 +123,39 @@ const OrderCard = ({ order, updateOrderStatus }) => (
             </Button>
           )}
           {order.status === 'processing' && (
-            <Button
-              colorScheme="green"
-              onClick={() => updateOrderStatus(order.id, 'completed')}
-              flex={1}
-            >
-              Mark Completed
-            </Button>
+            <>
+              <Button
+                colorScheme="green"
+                onClick={() => onCompleteOrder(order)}
+                flex={1}
+              >
+                Mark as Ready
+              </Button>
+              <Button
+                colorScheme="red"
+                variant="outline"
+                onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                flex={1}
+              >
+                Cancel Order
+              </Button>
+            </>
           )}
-          <Button
-            colorScheme="red"
-            variant="outline"
-            onClick={() => updateOrderStatus(order.id, 'cancelled')}
-            flex={1}
-          >
-            Cancel Order
-          </Button>
         </HStack>
       )}
     </Stack>
   </Box>
 );
 
-// Main component
+// Main Vendor Orders Component
 const VendorOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+  const [currentOrder, setCurrentOrder] = useState(null);
   const toast = useToast();
   const firestore = getFirestore();
 
@@ -172,15 +193,36 @@ const VendorOrders = () => {
     }
   };
 
+  const generatePickupCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
+
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      await updateDoc(doc(firestore, 'orders', orderId), {
+      const updateData = {
         status: newStatus,
-        updatedAt: new Date()
-      });
+        updatedAt: new Date(),
+      };
+
+      // Add pickup code when marking as completed
+      if (newStatus === 'completed') {
+        updateData.pickupCode = generatePickupCode();
+        updateData.completedAt = new Date();
+      }
+
+      await updateDoc(doc(firestore, 'orders', orderId), updateData);
       
       setOrders(orders.map(order => 
-        order.id === orderId ? { ...order, status: newStatus } : order
+        order.id === orderId 
+          ? { 
+              ...order, 
+              status: newStatus,
+              ...(newStatus === 'completed' && { 
+                pickupCode: updateData.pickupCode,
+                completedAt: updateData.completedAt 
+              })
+            } 
+          : order
       ));
 
       toast({
@@ -201,10 +243,86 @@ const VendorOrders = () => {
     }
   };
 
+  const handleCompleteOrder = (order) => {
+    setCurrentOrder(order);
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmCompleteOrder = async () => {
+    if (!currentOrder) return;
+
+    try {
+      await updateOrderStatus(currentOrder.id, 'completed');
+      setIsConfirmModalOpen(false);
+      setIsQRScannerOpen(true);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to mark order as ready',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleQRScan = async (result) => {
+    if (!currentOrder) return;
+
+    try {
+      // Verify the scanned QR code matches the order's pickup code
+      if (result[0]?.rawValue === currentOrder.pickupCode) {
+        await updateDoc(doc(firestore, 'orders', currentOrder.id), {
+          status: 'picked_up',
+          pickedUpAt: new Date()
+        });
+
+        setOrders(orders.map(order => 
+          order.id === currentOrder.id 
+            ? { 
+                ...order, 
+                status: 'picked_up',
+                pickedUpAt: new Date()
+              } 
+            : order
+        ));
+
+        toast({
+          title: 'Order Confirmed',
+          description: 'Order has been successfully picked up.',
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+
+        setIsQRScannerOpen(false);
+        setCurrentOrder(null);
+      } else {
+        toast({
+          title: 'Invalid Pickup Code',
+          description: 'The scanned QR code does not match the order\'s pickup code.',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to verify order pickup',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  // Filtering logic
   const filteredOrders = orders.filter(order => 
     filter === 'all' ? true : order.status === filter
   );
 
+  // Loading and error states
   if (loading) {
     return (
       <Container maxW="container.xl" centerContent py={8}>
@@ -240,6 +358,7 @@ const VendorOrders = () => {
               <option value="processing">Processing</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
+              <option value="picked_up">Picked Up</option>
             </Select>
             <Text color="gray.600">
               Showing {filteredOrders.length} orders
@@ -259,10 +378,82 @@ const VendorOrders = () => {
                 key={order.id}
                 order={order}
                 updateOrderStatus={updateOrderStatus}
+                onCompleteOrder={handleCompleteOrder}
               />
             ))}
           </SimpleGrid>
         )}
+
+        {/* Confirmation Modal for Completing Order */}
+        <Modal 
+          isOpen={isConfirmModalOpen} 
+          onClose={() => setIsConfirmModalOpen(false)}
+          size="md"
+          isCentered
+        >
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>Confirm Order Ready</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody>
+              <Text>Are you sure you want to mark this order as ready for pickup?</Text>
+              {currentOrder && (
+                <Box mt={4}>
+                  <Text fontWeight="bold">Order Details:</Text>
+                  <Text>Order ID: {currentOrder.id}</Text>
+                  <Text>Total: ${currentOrder.total.toFixed(2)}</Text>
+                </Box>
+              )}
+            </ModalBody>
+            <ModalFooter>
+              <Button 
+                variant="ghost" 
+                mr={3} 
+                onClick={() => setIsConfirmModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                colorScheme="green" 
+                onClick={confirmCompleteOrder}
+              >
+                Confirm Ready
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        {/* QR Scanner Modal */}
+        <Modal 
+          isOpen={isQRScannerOpen} 
+          onClose={() => setIsQRScannerOpen(false)}
+          size="md"
+          isCentered
+        >
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>Scan Pickup Code</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody>
+              <Text mb={4}>
+                Scan the QR code to confirm order pickup. 
+                Pickup Code: {currentOrder?.pickupCode}
+              </Text>
+              <Scanner
+                onScan={handleQRScan}
+                onError={(error) => console.error(error?.message)}
+              />
+            </ModalBody>
+            <ModalFooter>
+              <Button 
+                variant="ghost" 
+                onClick={() => setIsQRScannerOpen(false)}
+              >
+                Cancel
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
       </VStack>
     </Container>
   );
