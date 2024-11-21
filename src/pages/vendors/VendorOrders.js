@@ -270,11 +270,13 @@ const VendorOrders = () => {
     if (!currentOrder) return;
   
     try {
-      // Extract the actual pickup code from the scanned result
-      const scannedCode = result[0]?.rawValue?.split(':')[1] || result[0]?.rawValue;
+      // Extract the full scanned value
+      const scannedValue = result[0]?.rawValue;
   
-      // Check if the scanned code matches the order's pickup code
-      if (scannedCode === currentOrder.pickupCode) {
+      // Check if the scanned value matches the expected format
+      const expectedPrefix = `order-pickup:${currentOrder.id}`;
+      
+      if (scannedValue === expectedPrefix) {
         await updateDoc(doc(firestore, 'orders', currentOrder.id), {
           status: 'picked_up',
           pickedUpAt: new Date()
@@ -302,8 +304,8 @@ const VendorOrders = () => {
         setCurrentOrder(null);
       } else {
         toast({
-          title: 'Invalid Pickup Code',
-          description: 'The scanned QR code does not match the order\'s pickup code.',
+          title: 'Invalid QR Code',
+          description: 'The scanned QR code does not match this order.',
           status: 'error',
           duration: 3000,
           isClosable: true,
