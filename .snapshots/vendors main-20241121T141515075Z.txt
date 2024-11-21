@@ -6,12 +6,14 @@ import {
   Box,
   Text,
   Badge,
+  Divider,
   SimpleGrid,
   Button,
   Spinner,
   Alert,
   AlertIcon,
   useToast,
+  Stack,
   Select,
   HStack,
   Modal,
@@ -24,10 +26,128 @@ import {
 } from '@chakra-ui/react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { getFirestore, collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import OrderCard from '../../Components/order/OrderCard';
-import { generatePickupCode } from '../utils/helpers';
-import { OrderScheduler, generateDelayNotifications } from '../../Components/algorithm/orderScheduling';
 
+// Helper functions
+const formatDate = (date) => {
+  if (!date) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }).format(date);
+};
+
+const getStatusColor = (status) => {
+  const colors = {
+    pending: 'yellow',
+    processing: 'blue',
+    completed: 'green',
+    cancelled: 'red',
+    picked_up: 'purple'
+  };
+  return colors[status] || 'gray';
+};
+
+// OrderCard component
+const OrderCard = ({ order, updateOrderStatus, onCompleteOrder }) => (
+  <Box
+    borderWidth="1px"
+    borderRadius="lg"
+    p={6}
+    bg="white"
+    shadow="sm"
+  >
+    <Stack spacing={4}>
+      <HStack justify="space-between">
+        <Badge
+          colorScheme={getStatusColor(order.status)}
+          fontSize="0.9em"
+          p={2}
+          borderRadius="md"
+        >
+          {order.status.toUpperCase().replace('_', ' ')}
+        </Badge>
+        <Text fontSize="sm" color="gray.600">
+          {formatDate(order.createdAt)}
+        </Text>
+      </HStack>
+
+      <Box>
+        <Text fontWeight="bold" mb={2}>Customer Details</Text>
+        <Text>Email: {order.customerEmail}</Text>
+      </Box>
+
+      <Divider />
+
+      <Box>
+        <Text fontWeight="bold" mb={2}>Order Items</Text>
+        <VStack align="stretch" spacing={2}>
+          {order.items.map((item, index) => (
+            <HStack key={index} justify="space-between">
+              <Text>{item.name} x{item.quantity}</Text>
+              <Text>${(item.price * item.quantity).toFixed(2)}</Text>
+            </HStack>
+          ))}
+        </VStack>
+      </Box>
+
+      <Divider />
+
+      <HStack justify="space-between">
+        <Text fontWeight="bold">Total Amount:</Text>
+        <Text fontWeight="bold" color="green.600">
+          ${order.total.toFixed(2)}
+        </Text>
+      </HStack>
+
+      {order.status === 'completed' && (
+        <Box>
+          <Text fontWeight="bold" color="blue.600">
+            Pickup Code: {order.pickupCode}
+          </Text>
+        </Box>
+      )}
+
+      {order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'picked_up' && (
+        <HStack spacing={4}>
+          {order.status === 'pending' && (
+            <Button
+              colorScheme="blue"
+              onClick={() => updateOrderStatus(order.id, 'processing')}
+              flex={1}
+            >
+              Start Processing
+            </Button>
+          )}
+          {order.status === 'processing' && (
+            <>
+              <Button
+                colorScheme="green"
+                onClick={() => onCompleteOrder(order)}
+                flex={1}
+              >
+                Mark as Ready
+              </Button>
+              <Button
+                colorScheme="red"
+                variant="outline"
+                onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                flex={1}
+              >
+                Cancel Order
+              </Button>
+            </>
+          )}
+        </HStack>
+      )}
+    </Stack>
+  </Box>
+);
+
+// Main Vendor Orders Component
 const VendorOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,22 +156,12 @@ const VendorOrders = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
   const [currentOrder, setCurrentOrder] = useState(null);
-  const [delayNotifications, setDelayNotifications] = useState([]);
   const toast = useToast();
   const firestore = getFirestore();
 
   useEffect(() => {
     fetchOrders();
   }, []);
-
-  useEffect(() => {
-    if (orders.length > 0) {
-      const scheduler = new OrderScheduler(orders);
-      const delayedOrders = scheduler.detectPotentialDelays();
-      const notifications = generateDelayNotifications(delayedOrders);
-      setDelayNotifications(notifications);
-    }
-  }, [orders]);
 
   const fetchOrders = async () => {
     try {
@@ -83,6 +193,10 @@ const VendorOrders = () => {
     }
   };
 
+  const generatePickupCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
+
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
       const updateData = {
@@ -90,6 +204,7 @@ const VendorOrders = () => {
         updatedAt: new Date(),
       };
 
+      // Add pickup code when marking as completed
       if (newStatus === 'completed') {
         updateData.pickupCode = generatePickupCode();
         updateData.completedAt = new Date();
@@ -155,7 +270,10 @@ const VendorOrders = () => {
     if (!currentOrder) return;
   
     try {
+      // Extract the full scanned value
       const scannedValue = result[0]?.rawValue;
+  
+      // Check if the scanned value matches the expected format
       const expectedPrefix = `order-pickup:${currentOrder.id}`;
       
       if (scannedValue === expectedPrefix) {
@@ -204,10 +322,12 @@ const VendorOrders = () => {
     }
   };
 
+  // Filtering logic
   const filteredOrders = orders.filter(order => 
     filter === 'all' ? true : order.status === filter
   );
 
+  // Loading and error states
   if (loading) {
     return (
       <Container maxW="container.xl" centerContent py={8}>
@@ -230,17 +350,6 @@ const VendorOrders = () => {
   return (
     <Container maxW="container.xl" py={8}>
       <VStack spacing={8} align="stretch">
-        {delayNotifications.length > 0 && (
-          <Box>
-            {delayNotifications.map((notification, index) => (
-              <Alert status="warning" key={index} mb={2}>
-                <AlertIcon />
-                {notification.message}
-              </Alert>
-            ))}
-          </Box>
-        )}
-
         <Box>
           <Heading size="xl" mb={4}>Order Management</Heading>
           <HStack spacing={4}>
@@ -280,6 +389,7 @@ const VendorOrders = () => {
           </SimpleGrid>
         )}
 
+        {/* Confirmation Modal for Completing Order */}
         <Modal 
           isOpen={isConfirmModalOpen} 
           onClose={() => setIsConfirmModalOpen(false)}
@@ -318,6 +428,7 @@ const VendorOrders = () => {
           </ModalContent>
         </Modal>
 
+        {/* QR Scanner Modal */}
         <Modal 
           isOpen={isQRScannerOpen} 
           onClose={() => setIsQRScannerOpen(false)}
