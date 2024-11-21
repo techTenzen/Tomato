@@ -13,14 +13,27 @@ import {
   SimpleGrid,
   useColorModeValue,
   chakra,
-  Spinner
+  Spinner,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  ModalFooter
 } from '@chakra-ui/react';
 import { Search2Icon } from '@chakra-ui/icons';
-import { FaMapMarkerAlt, FaUtensils, FaGift, FaShoppingBag } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaUtensils, FaGift, FaShoppingBag, FaEye } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import Slider from 'react-slick';
-import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  collection, 
+  query, 
+  where, 
+  onSnapshot 
+} from 'firebase/firestore';
 import { app } from '../../Components/firebase/Firebase';
 
 // Import images
@@ -33,37 +46,7 @@ import pic4 from "../../Assets/Untitled design (1) (1).png"
 const MotionBox = chakra(motion.div);
 const MotionVStack = chakra(motion.div);
 
-// Active Orders Banner Component
-const ActiveOrderBanner = ({ activeOrders, onViewOrder }) => {
-  if (!activeOrders || activeOrders.length === 0) return null;
-
-  return (
-    <Box 
-      bg="green.50" 
-      p={3} 
-      borderRadius="lg" 
-      mb={4} 
-      boxShadow="md"
-    >
-      <Flex alignItems="center" justifyContent="space-between">
-        <Flex alignItems="center">
-          <Icon as={FaShoppingBag} mr={3} color="green.500" />
-          <Text fontWeight="bold" color="green.700">
-            {activeOrders.length} Active Order{activeOrders.length > 1 ? 's' : ''}
-          </Text>
-        </Flex>
-        <Button 
-          colorScheme="green" 
-          size="sm" 
-          onClick={onViewOrder}
-        >
-          View Order Status
-        </Button>
-      </Flex>
-    </Box>
-  );
-};
-
+// Food Category Component
 const FoodCategory = ({ icon, title, onClick }) => (
   <MotionVStack
     spacing={2}
@@ -96,6 +79,7 @@ const Home = () => {
   const [location, setLocation] = useState('');
   const [activeOrders, setActiveOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const firestore = getFirestore(app);
 
   useEffect(() => {
@@ -113,16 +97,21 @@ const Home = () => {
         const activeOrdersQuery = query(
           ordersRef, 
           where('userId', '==', user.uid),
-          where('status', 'in', ['pending', 'processing'])
+          where('status', 'in', ['pending', 'processing', 'completed'])
         );
         
-        const snapshot = await getDocs(activeOrdersQuery);
-        const orders = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setActiveOrders(orders);
-        setLoading(false);
+        // Real-time listener for active orders
+        const unsubscribe = onSnapshot(activeOrdersQuery, (snapshot) => {
+          const orders = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setActiveOrders(orders);
+          setLoading(false);
+        });
+
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
       } catch (error) {
         console.error('Error fetching active orders:', error);
         setLoading(false);
@@ -142,10 +131,13 @@ const Home = () => {
     navigate('/main');
   };
 
-  const handleViewActiveOrder = () => {
-    if (activeOrders.length > 0) {
-      navigate(`/order-waiting/${activeOrders[0].id}`);
-    }
+  const handleViewActiveOrders = () => {
+    setIsOrderModalOpen(true);
+  };
+
+  const handleOrderDetailsNavigation = (orderId) => {
+    navigate(`/order-waiting/${orderId}`);
+    setIsOrderModalOpen(false);
   };
 
   const bgGradient = useColorModeValue(
@@ -194,12 +186,33 @@ const Home = () => {
     >
       <Container maxW="container.xl">
         {/* Active Orders Banner */}
-        <ActiveOrderBanner 
-          activeOrders={activeOrders} 
-          onViewOrder={handleViewActiveOrder} 
-        />
+        {activeOrders.length > 0 && (
+          <Box 
+            bg="green.50" 
+            p={3} 
+            borderRadius="lg" 
+            mb={4} 
+            boxShadow="md"
+          >
+            <Flex alignItems="center" justifyContent="space-between">
+              <Flex alignItems="center">
+                <Icon as={FaShoppingBag} mr={3} color="green.500" />
+                <Text fontWeight="bold" color="green.700">
+                  {activeOrders.length} Active Order{activeOrders.length > 1 ? 's' : ''}
+                </Text>
+              </Flex>
+              <Button 
+                colorScheme="green" 
+                size="sm" 
+                onClick={handleViewActiveOrders}
+                leftIcon={<FaEye />}
+              >
+                View Orders
+              </Button>
+            </Flex>
+          </Box>
+        )}
 
-        {/* Rest of the component remains the same */}
         <Flex
           flexDirection={{ base: 'column', md: 'row' }}
           alignItems="center"
@@ -300,6 +313,49 @@ const Home = () => {
             />
           </MotionBox>
         </Flex>
+
+        {/* Active Orders Modal */}
+        <Modal 
+          isOpen={isOrderModalOpen} 
+          onClose={() => setIsOrderModalOpen(false)}
+          size="md"
+        >
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>Your Active Orders</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody>
+              {activeOrders.map((order) => (
+                <Flex 
+                  key={order.id} 
+                  justifyContent="space-between" 
+                  alignItems="center"
+                  mb={4}
+                  p={3}
+                  borderRadius="md"
+                  bg="gray.50"
+                >
+                  <VStack align="start" spacing={1}>
+                    <Text fontWeight="bold">Order #{order.id.slice(-6)}</Text>
+                    <Text color="gray.500" fontSize="sm">
+                      Status: {order.status}
+                    </Text>
+                  </VStack>
+                  <Button 
+                    colorScheme="green" 
+                    size="sm"
+                    onClick={() => handleOrderDetailsNavigation(order.id)}
+                  >
+                    View Details
+                  </Button>
+                </Flex>
+              ))}
+            </ModalBody>
+            <ModalFooter>
+              <Button onClick={() => setIsOrderModalOpen(false)}>Close</Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
       </Container>
     </Box>
   );

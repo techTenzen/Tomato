@@ -19,7 +19,8 @@ import {
   ModalHeader,
   ModalCloseButton,
   ModalBody,
-  ModalFooter
+  ModalFooter,
+  Flex
 } from '@chakra-ui/react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { getFirestore, collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
@@ -36,6 +37,7 @@ const VendorOrders = () => {
   const [currentOrder, setCurrentOrder] = useState(null);
   const [delayNotifications, setDelayNotifications] = useState([]);
   const [qrScannerState, setQRScannerState] = useState({ isOpen: false, order: null });
+  const [lastScannedOrderId, setLastScannedOrderId] = useState(null);
   
   const toast = useToast();
   const firestore = getFirestore();
@@ -193,6 +195,52 @@ const VendorOrders = () => {
     }
   };
 
+  const handlePersistentQRScan = async (result) => {
+    try {
+      const scannedValue = result[0]?.rawValue;
+      const expectedPrefix = 'order-pickup:';
+      
+      if (!scannedValue || !scannedValue.startsWith(expectedPrefix)) {
+        throw new Error('Invalid QR code');
+      }
+
+      const orderId = scannedValue.replace(expectedPrefix, '');
+      const scanningOrder = orders.find(order => order.id === orderId);
+
+      if (!scanningOrder) {
+        throw new Error('Order not found');
+      }
+
+      await updateDoc(doc(firestore, 'orders', orderId), { 
+        status: 'picked_up', 
+        pickedUpAt: new Date() 
+      });
+      
+      // Update local state for orders
+      setOrders(orders.map(order =>
+        order.id === orderId ? { ...order, status: 'picked_up', pickedUpAt: new Date() } : order
+      ));
+
+      setLastScannedOrderId(orderId);
+      
+      toast({
+        title: 'Order Confirmed',
+        description: 'Order has been successfully picked up.',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      toast({
+        title: 'QR Scan Error',
+        description: error.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
   const filteredOrders = orders.filter(order => filter === 'all' ? true : order.status === filter);
 
   if (loading) {
@@ -216,100 +264,115 @@ const VendorOrders = () => {
 
   return (
     <Container maxW="container.xl" py={8}>
-      <VStack spacing={8} align="stretch">
-        {delayNotifications.length > 0 && (
+      <Flex>
+        <VStack spacing={8} align="stretch" flex={2} mr={4}>
+          {delayNotifications.length > 0 && (
+            <Box>
+              {delayNotifications.map((notification, index) => (
+                <Alert status="warning" key={index} mb={2}>
+                  <AlertIcon />
+                  {notification.message}
+                </Alert>
+              ))}
+            </Box>
+          )}
+          
           <Box>
-            {delayNotifications.map((notification, index) => (
-              <Alert status="warning" key={index} mb={2}>
-                <AlertIcon />
-                {notification.message}
-              </Alert>
-            ))}
+            <Heading size="xl" mb={4}>Order Management</Heading>
+            <HStack spacing={4}>
+              <Select value={filter} onChange={(e) => setFilter(e.target.value)} width="200px">
+                <option value="all">All Orders</option>
+                <option value="pending">Pending</option>
+                <option value="processing">Processing</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="picked_up">Picked Up</option>
+              </Select>
+              <Text color="gray.600"> Showing {filteredOrders.length} orders </Text>
+            </HStack>
           </Box>
-        )}
-        
-        <Box>
-          <Heading size="xl" mb={4}>Order Management</Heading>
-          <HStack spacing={4}>
-            <Select value={filter} onChange={(e) => setFilter(e.target.value)} width="200px">
-              <option value="all">All Orders</option>
-              <option value="pending">Pending</option>
-              <option value="processing">Processing</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="picked_up">Picked Up</option>
-            </Select>
-            <Text color="gray.600"> Showing {filteredOrders.length} orders </Text>
-          </HStack>
-        </Box>
 
-        {filteredOrders.length === 0 ? (
-          <Alert status="info">
-            <AlertIcon />
-            No orders found for the selected filter.
-          </Alert>
-        ) : (
-          <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
-            {filteredOrders.map((order) => (
-              <OrderCard 
-                key={order.id} 
-                order={order} 
-                updateOrderStatus={updateOrderStatus} 
-                onCompleteOrder={handleCompleteOrder} 
-                onScanQR={() => openQRScanner(order)} 
-              />
-            ))}
-          </SimpleGrid>
-        )}
+          {filteredOrders.length === 0 ? (
+            <Alert status="info">
+              <AlertIcon />
+              No orders found for the selected filter.
+            </Alert>
+          ) : (
+            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
+              {filteredOrders.map((order) => (
+                <OrderCard 
+                  key={order.id} 
+                  order={order} 
+                  updateOrderStatus={updateOrderStatus} 
+                  onCompleteOrder={handleCompleteOrder} 
+                  onScanQR={() => openQRScanner(order)}
+                  isHighlighted={order.id === lastScannedOrderId}
+                />
+              ))}
+            </SimpleGrid>
+          )}
 
-        {/* Confirmation Modal */}
-        <Modal isOpen={isConfirmModalOpen} onClose={() => setIsConfirmModalOpen(false)} size="md" isCentered>
-          <ModalOverlay />
-          <ModalContent>
-            <ModalHeader>Confirm Order Ready</ModalHeader>
-            <ModalCloseButton />
-            <ModalBody>
-              <Text>Are you sure you want to mark this order as ready for pickup?</Text>
-              {currentOrder && (
-                <Box mt={4}>
-                  <Text fontWeight="bold">Order Details:</Text>
-                  <Text>Order ID: {currentOrder.id}</Text>
-                  <Text>Total: ${currentOrder.total.toFixed(2)}</Text>
-                </Box>
-              )}
-            </ModalBody>
-            <ModalFooter>
-              <Button variant="ghost" mr={3} onClick={() => setIsConfirmModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button colorScheme="green" onClick={confirmCompleteOrder}>
-                Confirm Ready
-              </Button>
-            </ModalFooter>
-          </ModalContent>
-        </Modal>
+          {/* Confirmation Modal */}
+          <Modal isOpen={isConfirmModalOpen} onClose={() => setIsConfirmModalOpen(false)} size="md" isCentered>
+            <ModalOverlay />
+            <ModalContent>
+              <ModalHeader>Confirm Order Ready</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                <Text>Are you sure you want to mark this order as ready for pickup?</Text>
+                {currentOrder && (
+                  <Box mt={4}>
+                    <Text fontWeight="bold">Order Details:</Text>
+                    <Text>Order ID: {currentOrder.id}</Text>
+                    <Text>Total: ${currentOrder.total.toFixed(2)}</Text>
+                  </Box>
+                )}
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" mr={3} onClick={() => setIsConfirmModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button colorScheme="green" onClick={confirmCompleteOrder}>
+                  Confirm Ready
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
 
-        {/* QR Scanner Modal */}
-        <Modal isOpen={qrScannerState.isOpen} onClose={closeQRScanner} size="md" isCentered>
-          <ModalOverlay />
-          <ModalContent>
-            <ModalHeader>Scan Pickup Code</ModalHeader>
-            <ModalCloseButton />
-            <ModalBody>
-              <Text mb={4}>
-                Scan the QR code to confirm order pickup. Pickup Code: {qrScannerState.order?.pickupCode}
-              </Text>
-              <Scanner onScan={handleQRScan} onError={(error) => console.error(error?.message)} />
-            </ModalBody>
-            <ModalFooter>
-              <Button variant="ghost" onClick={closeQRScanner}>
-                Cancel
-              </Button>
-            </ModalFooter>
-          </ModalContent>
-        </Modal>
+          {/* QR Scanner Modal */}
+          <Modal isOpen={qrScannerState.isOpen} onClose={closeQRScanner} size="md" isCentered>
+            <ModalOverlay />
+            <ModalContent>
+              <ModalHeader>Scan Pickup Code</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                <Text mb={4}>
+                  Scan the QR code to confirm order pickup. Pickup Code: {qrScannerState.order?.pickupCode}
+                </Text>
+                <Scanner 
+                  onScan={handleQRScan} 
+                  onError={(error) => console.error(error?.message)} 
+                />
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" onClick={closeQRScanner}>
+                  Cancel
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
+        </VStack>
 
-      </VStack>
+        <VStack spacing={4} flex={1} position="sticky" top="20px">
+          <Box width="full" borderWidth={1} borderRadius="lg" p={4}>
+            <Heading size="md" mb={4} textAlign="center">Persistent QR Scanner</Heading>
+            <Scanner 
+              onScan={handlePersistentQRScan} 
+              onError={(error) => console.error(error?.message)} 
+            />
+          </Box>
+        </VStack>
+      </Flex>
     </Container>
   );
 };
