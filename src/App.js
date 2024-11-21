@@ -60,7 +60,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/order-waiting" element={<OrderWaitingPage />} />
+          <Route path="/order-waiting/:orderid" element={<OrderWaitingPage />} />
           
           <Route
             path="/main"
@@ -119,7 +119,7 @@ function App() {
             }
           />
         </Routes>
-        <Footer/>
+        
       </BrowserRouter>
     </ChakraProvider>
   );

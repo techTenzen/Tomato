@@ -101,11 +101,21 @@ const Home = () => {
   useEffect(() => {
     const fetchActiveOrders = async () => {
       try {
+        // Get the logged-in user from localStorage
+        const user = JSON.parse(localStorage.getItem('user'));
+        
+        if (!user) {
+          setLoading(false);
+          return;
+        }
+
         const ordersRef = collection(firestore, 'orders');
         const activeOrdersQuery = query(
           ordersRef, 
+          where('userId', '==', user.uid),
           where('status', 'in', ['pending', 'processing'])
         );
+        
         const snapshot = await getDocs(activeOrdersQuery);
         const orders = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -134,9 +144,7 @@ const Home = () => {
 
   const handleViewActiveOrder = () => {
     if (activeOrders.length > 0) {
-      navigate('/order-waiting', { 
-        state: { orderId: activeOrders[0].id } 
-      });
+      navigate(`/order-waiting/${activeOrders[0].id}`);
     }
   };
 
@@ -191,6 +199,7 @@ const Home = () => {
           onViewOrder={handleViewActiveOrder} 
         />
 
+        {/* Rest of the component remains the same */}
         <Flex
           flexDirection={{ base: 'column', md: 'row' }}
           alignItems="center"

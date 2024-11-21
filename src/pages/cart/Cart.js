@@ -22,7 +22,7 @@ import {
   Stack
 } from '@chakra-ui/react';
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
-import { getFirestore, collection, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, doc } from 'firebase/firestore';
 import { Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -36,12 +36,10 @@ const Cart = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Load cart items from localStorage
     const loadCart = () => {
       const savedCart = JSON.parse(localStorage.getItem('cart') || '[]');
       setCartItems(savedCart);
       
-      // Group items by shop
       const grouped = savedCart.reduce((acc, item) => {
         const shopId = item.shopId;
         if (!acc[shopId]) {
@@ -67,7 +65,6 @@ const Cart = () => {
     localStorage.setItem('cart', JSON.stringify(updatedCart));
     setCartItems(updatedCart);
     
-    // Update grouped items
     const grouped = updatedCart.reduce((acc, item) => {
       const shopId = item.shopId;
       if (!acc[shopId]) {
@@ -95,7 +92,6 @@ const Cart = () => {
     localStorage.setItem('cart', JSON.stringify(updatedCart));
     setCartItems(updatedCart);
     
-    // Update grouped items
     const grouped = updatedCart.reduce((acc, item) => {
       const shopId = item.shopId;
       if (!acc[shopId]) {
@@ -120,14 +116,16 @@ const Cart = () => {
 
   const createFirestoreOrder = async (shopData, paymentDetails = null) => {
     try {
+      const user = JSON.parse(localStorage.getItem('user'));
       const orderData = {
         shopId: shopData.id,
+        userId: user.uid,
         shopName: shopData.shopName,
         items: shopData.items,
         total: shopData.total,
         status: 'pending',
         paymentStatus: paymentDetails ? 'completed' : 'pending',
-        customerEmail: JSON.parse(localStorage.getItem('user'))?.email,
+        customerEmail: user.email,
         createdAt: new Date(),
         paymentDetails: paymentDetails
       };
@@ -148,7 +146,8 @@ const Cart = () => {
         isClosable: true,
       });
 
-      navigate('/order-waiting', { state: { orderId: newDocRef.id } });
+      // Navigate to order waiting page with order ID
+      navigate(`/order-waiting/${newDocRef.id}`);
       onClose();
 
       return newDocRef.id;
@@ -292,7 +291,6 @@ const Cart = () => {
                   onApprove={async (data, actions) => {
                     const details = await actions.order.capture();
                     
-                    // Create order in Firestore with payment details
                     const orderId = await createFirestoreOrder(selectedShop, {
                       orderID: details.id,
                       payerID: details.payer.payer_id,

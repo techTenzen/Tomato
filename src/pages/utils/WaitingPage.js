@@ -5,7 +5,6 @@ import {
   Heading,
   Text,
   Box,
-  Spinner,
   Progress,
   Button,
   Alert,
@@ -20,57 +19,98 @@ import {
   ModalCloseButton,
   ModalBody
 } from '@chakra-ui/react';
-import { QRCodeSVG } from 'qrcode.react'; // Updated import
-import { useNavigate, useLocation } from 'react-router-dom';
-import { getFirestore, doc, onSnapshot } from 'firebase/firestore';
+import { QRCodeSVG } from 'qrcode.react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { 
+  getFirestore, 
+  doc, 
+  onSnapshot, 
+  getDoc 
+} from 'firebase/firestore';
 import { 
   CheckCircle, 
   Clock, 
   ShoppingBag,
   XCircle 
 } from 'lucide-react';
+import { getAuth } from 'firebase/auth';
 
 const OrderWaitingPage = () => {
   const [orderStatus, setOrderStatus] = useState('pending');
   const [isReadyForPickup, setIsReadyForPickup] = useState(false);
   const [isCancelled, setIsCancelled] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [orderDetails, setOrderDetails] = useState(null);
+  
   const navigate = useNavigate();
-  const location = useLocation();
+  const { orderid } = useParams(); // Use useParams to get orderid from URL
   const firestore = getFirestore();
+  const auth = getAuth();
 
   // Responsive sizing
   const headingSize = useBreakpointValue({ base: 'lg', md: 'xl' });
   const containerPadding = useBreakpointValue({ base: 4, md: 8 });
   const iconSize = useBreakpointValue({ base: 8, md: 10 });
 
-  const orderId = location.state?.orderId;
-
   useEffect(() => {
-    if (!orderId) {
-      navigate('/');
-      return;
-    }
-
-    const orderRef = doc(firestore, 'orders', orderId);
-    const unsubscribe = onSnapshot(orderRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const orderData = docSnapshot.data();
-        setOrderStatus(orderData.status);
-        setIsReadyForPickup(orderData.status === 'completed');
-        setIsCancelled(orderData.status === 'cancelled');
+    const checkOrderAuthorization = async () => {
+      if (!orderid || !auth.currentUser) {
+        navigate('/');
+        return;
       }
-    });
 
-    return () => unsubscribe();
-  }, [orderId, firestore, navigate]);
+      try {
+        const orderRef = doc(firestore, 'orders', orderid);
+        const orderSnapshot = await getDoc(orderRef);
+
+        if (orderSnapshot.exists()) {
+          const orderData = orderSnapshot.data();
+          
+          // Strict user authorization check
+          if (orderData.userId !== auth.currentUser.uid) {
+            setIsAuthorized(false);
+            return;
+          }
+
+          // Set authorized and store order details
+          setIsAuthorized(true);
+          setOrderDetails(orderData);
+
+          // Real-time listener for order updates
+          const unsubscribe = onSnapshot(orderRef, (docSnapshot) => {
+            if (docSnapshot.exists()) {
+              const updatedOrderData = docSnapshot.data();
+              
+              // Only update if the current user is the order owner
+              if (updatedOrderData.userId === auth.currentUser.uid) {
+                setOrderStatus(updatedOrderData.status || 'pending');
+                setIsReadyForPickup(updatedOrderData.status === 'completed');
+                setIsCancelled(updatedOrderData.status === 'cancelled');
+                setOrderDetails(updatedOrderData);
+              }
+            }
+          });
+
+          return () => unsubscribe();
+        } else {
+          navigate('/');
+        }
+      } catch (error) {
+        console.error('Error checking order authorization:', error);
+        navigate('/');
+      }
+    };
+
+    checkOrderAuthorization();
+  }, [orderid, firestore, navigate, auth]);
 
   const handlePickup = () => {
-    navigate('/order-confirmation', { state: { orderId } });
+    navigate('/order-confirmation', { state: { orderId: orderid } });
   };
 
   const handleBackToHome = () => {
-    navigate('/'); // or wherever you want to redirect after cancellation
+    navigate('/');
   };
 
   const handleOpenQRModal = () => {
@@ -128,6 +168,24 @@ const OrderWaitingPage = () => {
     }
   };
 
+  // If not authorized, show unauthorized message
+  if (!isAuthorized) {
+    return (
+      <Container 
+        maxW="container.sm"
+        py={containerPadding} 
+        bg="gray.50" 
+        minHeight="100vh"
+        px={containerPadding}
+      >
+        <Alert status="error" variant="subtle">
+          <AlertIcon />
+          <Text>You are not authorized to view this order.</Text>
+        </Alert>
+      </Container>
+    );
+  }
+
   const statusDetails = getStatusDetails();
 
   return (
@@ -138,215 +196,84 @@ const OrderWaitingPage = () => {
       minHeight="100vh"
       px={containerPadding}
     >
-      <VStack 
-        spacing={{ base: 6, md: 8 }}
-        align="stretch" 
-        bg="white" 
-        p={{ base: 4, md: 8 }}
-        borderRadius="xl" 
-        boxShadow="xl"
-      >
-        <Flex 
-          alignItems="center" 
-          justifyContent="center" 
-          mb={{ base: 2, md: 4 }}
+      <VStack spacing={6} align="stretch">
+        <Heading textAlign="center" size={headingSize}>
+          Order Status
+        </Heading>
+
+        <Box 
+          bg="white" 
+          p={6} 
+          borderRadius="lg" 
+          boxShadow="md"
         >
-          <Icon 
-            as={statusDetails.icon} 
-            w={iconSize} 
-            h={iconSize} 
-            color={`${statusDetails.color}.500`} 
-            mr={{ base: 2, md: 4 }}
-          />
-          <Heading 
-            textAlign="center" 
-            color="gray.700"
-            size={headingSize}
-          >
-            Order Status
-          </Heading>
-        </Flex>
-
-        {isCancelled ? (
-          <Alert
-            status="error"
-            variant="subtle"
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            textAlign="center"
-            height={{ base: "200px", md: "250px" }}
-            borderRadius="xl"
-          >
-            <AlertIcon boxSize={{ base: "40px", md: "50px" }} mr={0} />
-            <Heading 
-              size={{ base: "md", md: "lg" }} 
-              mb={4} 
-              color="red.600"
-            >
-              Order Cancelled
-            </Heading>
-            <Text 
-              fontSize={{ base: "sm", md: "md" }} 
-              mb={6} 
-              color="gray.600"
-            >
-              Unfortunately, this order has been cancelled by the vendor.
-            </Text>
-            <Button
-              colorScheme="red"
-              size={{ base: "md", md: "lg" }}
-              borderRadius="full"
-              px={{ base: 6, md: 8 }}
-              boxShadow="md"
-              _hover={{
-                transform: 'translateY(-2px)',
-                boxShadow: 'lg'
-              }}
-              onClick={handleBackToHome}
-            >
-              Back to Home
-            </Button>
-          </Alert>
-        ) : isReadyForPickup ? (
-          <>
-            <Alert
-              status="success"
-              variant="subtle"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              textAlign="center"
-              height={{ base: "200px", md: "250px" }}
-              borderRadius="xl"
-            >
-              <AlertIcon boxSize={{ base: "40px", md: "50px" }} mr={0} />
-              <Heading 
-                size={{ base: "md", md: "lg" }} 
-                mb={4} 
-                color="green.600"
-              >
-                Order is Ready for Pickup!
-              </Heading>
-              <Text 
-                fontSize={{ base: "sm", md: "md" }} 
-                mb={6} 
-                color="gray.600"
-              >
-                Your order from the vendor is now complete and ready to be collected.
-              </Text>
-              <Flex gap={4}>
-                <Button
-                  colorScheme="green"
-                  size={{ base: "md", md: "lg" }}
-                  borderRadius="full"
-                  px={{ base: 6, md: 8 }}
-                  boxShadow="md"
-                  _hover={{
-                    transform: 'translateY(-2px)',
-                    boxShadow: 'lg'
-                  }}
-                  onClick={handlePickup}
-                >
-                  Proceed to Pickup
-                </Button>
-                <Button
-                  colorScheme="blue"
-                  size={{ base: "md", md: "lg" }}
-                  borderRadius="full"
-                  px={{ base: 6, md: 8 }}
-                  boxShadow="md"
-                  _hover={{
-                    transform: 'translateY(-2px)',
-                    boxShadow: 'lg'
-                  }}
-                  onClick={handleOpenQRModal}
-                >
-                  View QR Code
-                </Button>
-              </Flex>
-            </Alert>
-
-            <Modal 
-              isOpen={isQRModalOpen} 
-              onClose={handleCloseQRModal} 
-              size={{ base: "sm", md: "md" }}
-              isCentered
-            >
-              <ModalOverlay />
-              <ModalContent>
-                <ModalHeader>Order Pickup QR Code</ModalHeader>
-                <ModalCloseButton />
-                <ModalBody 
-                  display="flex" 
-                  flexDirection="column" 
-                  alignItems="center" 
-                  justifyContent="center" 
-                  p={6}
-                >
-                  <QRCodeSVG
-  value={`order-pickup:${orderId}`} 
-  size={256} 
-  level={'H'} 
-  includeMargin={true}
-/>
-                  <Text 
-                    mt={4} 
-                    textAlign="center" 
-                    color="gray.600" 
-                    fontSize="sm"
-                  >
-                    Show this QR code to the staff for order pickup
-                  </Text>
-                </ModalBody>
-              </ModalContent>
-            </Modal>
-          </>
-        ) : (
-          <>
-            <Flex 
-              flexDirection="column" 
-              alignItems="center" 
-              textAlign="center" 
-              mb={{ base: 4, md: 6 }}
-            >
-              <Spinner 
-                size={{ base: "lg", md: "xl" }}
-                color={`${statusDetails.color}.500`} 
-                thickness="4px"
-                speed="0.8s"
-                emptyColor="gray.200"
-              />
-              <Text 
-                mt={{ base: 2, md: 4 }}
-                fontSize={{ base: "md", md: "lg" }}
-                fontWeight="semibold" 
-                color="gray.700"
-              >
-                {statusDetails.description}
-              </Text>
-            </Flex>
-
-            <Progress
-              value={statusDetails.progressValue}
-              size="lg"
-              colorScheme={statusDetails.color}
-              hasStripe
-              isAnimated
-              borderRadius="full"
+          <Flex alignItems="center" mb={4}>
+            <Icon 
+              as={statusDetails.icon} 
+              color={`${statusDetails.color}.500`} 
+              w={iconSize} 
+              h={iconSize} 
+              mr={4} 
             />
+            <Text fontWeight="bold" fontSize="lg">
+              {statusDetails.description}
+            </Text>
+          </Flex>
+          
+          <Progress 
+            value={statusDetails.progressValue} 
+            colorScheme={statusDetails.color} 
+            size="lg" 
+            borderRadius="md" 
+            mb={4} 
+          />
+          
+          <Text textAlign="center" color="gray.600">
+            {statusDetails.message}
+          </Text>
+        </Box>
 
-            <Box textAlign="center" mt={{ base: 2, md: 4 }}>
-              <Text 
-                fontSize={{ base: "sm", md: "md" }}
-                color="gray.500" 
-                fontStyle="italic"
-              >
-                {statusDetails.message}
-              </Text>
-            </Box>
-          </>
+        {isReadyForPickup && (
+          <Button 
+            colorScheme="green" 
+            size="lg" 
+            onClick={handlePickup}
+            width="full"
+          >
+            Proceed to Pickup
+          </Button>
         )}
+
+        {isCancelled && (
+          <Button 
+            colorScheme="red" 
+            size="lg" 
+            onClick={handleBackToHome}
+            width="full"
+          >
+            Back to Home
+          </Button>
+        )}
+
+        <Button 
+          variant="outline" 
+          colorScheme="blue" 
+          onClick={handleOpenQRModal}
+          width="full"
+        >
+          Show Order QR Code when order is ready to pickup.
+        </Button>
+
+        <Modal isOpen={isQRModalOpen} onClose={handleCloseQRModal}>
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>Order QR Code</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody display="flex" justifyContent="center" py={6}>
+              <QRCodeSVG value={orderid} size={256} />
+            </ModalBody>
+          </ModalContent>
+        </Modal>
       </VStack>
     </Container>
   );
