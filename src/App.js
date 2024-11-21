@@ -16,6 +16,7 @@ import UserOrders from './pages/orders/UserOrders';
 import { getCurrentUser } from './Components/firebase/Firebase';
 import OrderWaitingPage from './pages/utils/WaitingPage';
 import Footer from './Components/footer/Footer';
+import OrderPickupConfirmation from './Components/order/OrderConfirmation';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const [user, setUser] = useState(null);
@@ -61,6 +62,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
           <Route path="/order-waiting/:orderid" element={<OrderWaitingPage />} />
+          <Route path="/order-confirmation" element={<OrderPickupConfirmation />} />
           
           <Route
             path="/main"

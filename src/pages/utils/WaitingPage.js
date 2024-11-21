@@ -161,13 +161,14 @@ const OrderWaitingPage = () => {
           color: 'green'
         };
       default:
-        return {
-          description: 'Processing Order',
-          progressValue: 50,
-          message: 'Your order is being processed',
-          icon: Clock,
-          color: 'gray'
-        };
+        navigate('/order-confirmation', { state: { orderId: orderid } });
+      return {
+        description: 'Processing Order',
+        progressValue: 50,
+        message: 'Your order is being processed',
+        icon: Clock,
+        color: 'gray'
+      };
     }
   };
 
