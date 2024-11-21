@@ -237,16 +237,16 @@ const OrderWaitingPage = () => {
           </Text>
         </Box>
 
-        {isReadyForPickup && (
-          <Button 
-            colorScheme="green" 
-            size="lg" 
-            onClick={handlePickup}
-            width="full"
-          >
-            Proceed to Pickup
-          </Button>
-        )}
+        {/* {isReadyForPickup && (
+          // <Button 
+          //   colorScheme="green" 
+          //   size="lg" 
+          //   onClick={handlePickup}
+          //   width="full"
+          // >
+          //   Proceed to Pickup
+          // </Button>
+        )} */}
 
         {isCancelled && (
           <Button 

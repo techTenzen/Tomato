@@ -5,7 +5,6 @@ import {
   Heading,
   Box,
   Text,
-  Badge,
   SimpleGrid,
   Button,
   Spinner,
@@ -34,9 +33,10 @@ const VendorOrders = () => {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
   const [currentOrder, setCurrentOrder] = useState(null);
   const [delayNotifications, setDelayNotifications] = useState([]);
+  const [qrScannerState, setQRScannerState] = useState({ isOpen: false, order: null });
+  
   const toast = useToast();
   const firestore = getFirestore();
 
@@ -57,17 +57,14 @@ const VendorOrders = () => {
     try {
       const user = JSON.parse(localStorage.getItem('user'));
       if (!user) throw new Error('No user found');
-
       const ordersRef = collection(firestore, 'orders');
       const q = query(ordersRef, where('shopId', '==', user.shopId));
       const snapshot = await getDocs(q);
-
       const ordersList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate()
       }));
-
       setOrders(ordersList.sort((a, b) => b.createdAt - a.createdAt));
       setLoading(false);
     } catch (error) {
@@ -89,27 +86,17 @@ const VendorOrders = () => {
         status: newStatus,
         updatedAt: new Date(),
       };
-
       if (newStatus === 'completed') {
         updateData.pickupCode = generatePickupCode();
         updateData.completedAt = new Date();
       }
-
       await updateDoc(doc(firestore, 'orders', orderId), updateData);
       
+      // Update local state for orders
       setOrders(orders.map(order => 
-        order.id === orderId 
-          ? { 
-              ...order, 
-              status: newStatus,
-              ...(newStatus === 'completed' && { 
-                pickupCode: updateData.pickupCode,
-                completedAt: updateData.completedAt 
-              })
-            } 
-          : order
+        order.id === orderId ? { ...order, status: newStatus, ...(newStatus === 'completed' && { pickupCode: updateData.pickupCode, completedAt: updateData.completedAt }) } : order
       ));
-
+      
       toast({
         title: 'Status Updated',
         description: `Order status updated to ${newStatus}`,
@@ -135,11 +122,13 @@ const VendorOrders = () => {
 
   const confirmCompleteOrder = async () => {
     if (!currentOrder) return;
-
     try {
       await updateOrderStatus(currentOrder.id, 'completed');
+      
+      // Open the QR Scanner after marking as ready
+      openQRScanner(currentOrder);
+
       setIsConfirmModalOpen(false);
-      setIsQRScannerOpen(true);
     } catch (error) {
       toast({
         title: 'Error',
@@ -151,29 +140,30 @@ const VendorOrders = () => {
     }
   };
 
+  const openQRScanner = (order) => {
+    setQRScannerState({ isOpen: true, order });
+  };
+
+  const closeQRScanner = () => {
+    setQRScannerState({ isOpen: false, order: null });
+  };
+
   const handleQRScan = async (result) => {
-    if (!currentOrder) return;
-  
+    const scanningOrder = qrScannerState.order;
+    if (!scanningOrder) return;
+    
     try {
       const scannedValue = result[0]?.rawValue;
-      const expectedValue = `order-pickup:${currentOrder.id}`;
+      const expectedValue = `order-pickup:${scanningOrder.id}`;
       
       if (scannedValue === expectedValue) {
-        await updateDoc(doc(firestore, 'orders', currentOrder.id), {
-          status: 'picked_up',
-          pickedUpAt: new Date()
-        });
-  
-        setOrders(orders.map(order => 
-          order.id === currentOrder.id 
-            ? { 
-                ...order, 
-                status: 'picked_up',
-                pickedUpAt: new Date()
-              } 
-            : order
+        await updateDoc(doc(firestore, 'orders', scanningOrder.id), { status: 'picked_up', pickedUpAt: new Date() });
+        
+        // Update local state for orders
+        setOrders(orders.map(order =>
+          order.id === scanningOrder.id ? { ...order, status: 'picked_up', pickedUpAt: new Date() } : order
         ));
-  
+        
         toast({
           title: 'Order Confirmed',
           description: 'Order has been successfully picked up.',
@@ -181,9 +171,8 @@ const VendorOrders = () => {
           duration: 3000,
           isClosable: true,
         });
-  
-        setIsQRScannerOpen(false);
-        setCurrentOrder(null);
+        
+        closeQRScanner();
       } else {
         toast({
           title: 'Invalid QR Code',
@@ -204,9 +193,7 @@ const VendorOrders = () => {
     }
   };
 
-  const filteredOrders = orders.filter(order => 
-    filter === 'all' ? true : order.status === filter
-  );
+  const filteredOrders = orders.filter(order => filter === 'all' ? true : order.status === filter);
 
   if (loading) {
     return (
@@ -240,15 +227,11 @@ const VendorOrders = () => {
             ))}
           </Box>
         )}
-
+        
         <Box>
           <Heading size="xl" mb={4}>Order Management</Heading>
           <HStack spacing={4}>
-            <Select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              width="200px"
-            >
+            <Select value={filter} onChange={(e) => setFilter(e.target.value)} width="200px">
               <option value="all">All Orders</option>
               <option value="pending">Pending</option>
               <option value="processing">Processing</option>
@@ -256,9 +239,7 @@ const VendorOrders = () => {
               <option value="cancelled">Cancelled</option>
               <option value="picked_up">Picked Up</option>
             </Select>
-            <Text color="gray.600">
-              Showing {filteredOrders.length} orders
-            </Text>
+            <Text color="gray.600"> Showing {filteredOrders.length} orders </Text>
           </HStack>
         </Box>
 
@@ -270,22 +251,19 @@ const VendorOrders = () => {
         ) : (
           <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
             {filteredOrders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                updateOrderStatus={updateOrderStatus}
-                onCompleteOrder={handleCompleteOrder}
+              <OrderCard 
+                key={order.id} 
+                order={order} 
+                updateOrderStatus={updateOrderStatus} 
+                onCompleteOrder={handleCompleteOrder} 
+                onScanQR={() => openQRScanner(order)} 
               />
             ))}
           </SimpleGrid>
         )}
 
-        <Modal 
-          isOpen={isConfirmModalOpen} 
-          onClose={() => setIsConfirmModalOpen(false)}
-          size="md"
-          isCentered
-        >
+        {/* Confirmation Modal */}
+        <Modal isOpen={isConfirmModalOpen} onClose={() => setIsConfirmModalOpen(false)} size="md" isCentered>
           <ModalOverlay />
           <ModalContent>
             <ModalHeader>Confirm Order Ready</ModalHeader>
@@ -301,53 +279,36 @@ const VendorOrders = () => {
               )}
             </ModalBody>
             <ModalFooter>
-              <Button 
-                variant="ghost" 
-                mr={3} 
-                onClick={() => setIsConfirmModalOpen(false)}
-              >
+              <Button variant="ghost" mr={3} onClick={() => setIsConfirmModalOpen(false)}>
                 Cancel
               </Button>
-              <Button 
-                colorScheme="green" 
-                onClick={confirmCompleteOrder}
-              >
+              <Button colorScheme="green" onClick={confirmCompleteOrder}>
                 Confirm Ready
               </Button>
             </ModalFooter>
           </ModalContent>
         </Modal>
 
-        <Modal 
-          isOpen={isQRScannerOpen} 
-          onClose={() => setIsQRScannerOpen(false)}
-          size="md"
-          isCentered
-        >
+        {/* QR Scanner Modal */}
+        <Modal isOpen={qrScannerState.isOpen} onClose={closeQRScanner} size="md" isCentered>
           <ModalOverlay />
           <ModalContent>
             <ModalHeader>Scan Pickup Code</ModalHeader>
             <ModalCloseButton />
             <ModalBody>
               <Text mb={4}>
-                Scan the QR code to confirm order pickup. 
-                Pickup Code: {currentOrder?.pickupCode}
+                Scan the QR code to confirm order pickup. Pickup Code: {qrScannerState.order?.pickupCode}
               </Text>
-              <Scanner
-                onScan={handleQRScan}
-                onError={(error) => console.error(error?.message)}
-              />
+              <Scanner onScan={handleQRScan} onError={(error) => console.error(error?.message)} />
             </ModalBody>
             <ModalFooter>
-              <Button 
-                variant="ghost" 
-                onClick={() => setIsQRScannerOpen(false)}
-              >
+              <Button variant="ghost" onClick={closeQRScanner}>
                 Cancel
               </Button>
             </ModalFooter>
           </ModalContent>
         </Modal>
+
       </VStack>
     </Container>
   );

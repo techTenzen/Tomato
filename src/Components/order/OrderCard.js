@@ -1,4 +1,3 @@
-// src/components/OrderCard.jsx
 import React from 'react';
 import {
   Box,
@@ -12,7 +11,7 @@ import {
 } from '@chakra-ui/react';
 import { formatDate, getStatusColor } from '../../pages/utils/helpers';
 
-const OrderCard = ({ order, updateOrderStatus, onCompleteOrder }) => (
+const OrderCard = ({ order, updateOrderStatus, onCompleteOrder, onScanQR }) => (
   <Box
     borderWidth="1px"
     borderRadius="lg"
@@ -69,6 +68,19 @@ const OrderCard = ({ order, updateOrderStatus, onCompleteOrder }) => (
             Pickup Code: {order.pickupCode}
           </Text>
         </Box>
+      )}
+
+      {/* Show Scan QR Code button only after marking as ready */}
+      {order.status === 'completed' && (
+        <HStack spacing={4}>
+          <Button
+            colorScheme="teal"
+            onClick={onScanQR}
+            flex={1}
+          >
+            Scan QR Code
+          </Button>
+        </HStack>
       )}
 
       {order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'picked_up' && (
