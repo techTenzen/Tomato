@@ -268,15 +268,18 @@ const VendorOrders = () => {
 
   const handleQRScan = async (result) => {
     if (!currentOrder) return;
-
+  
     try {
-      // Verify the scanned QR code matches the order's pickup code
-      if (result[0]?.rawValue === currentOrder.pickupCode) {
+      // Extract the actual pickup code from the scanned result
+      const scannedCode = result[0]?.rawValue?.split(':')[1] || result[0]?.rawValue;
+  
+      // Check if the scanned code matches the order's pickup code
+      if (scannedCode === currentOrder.pickupCode) {
         await updateDoc(doc(firestore, 'orders', currentOrder.id), {
           status: 'picked_up',
           pickedUpAt: new Date()
         });
-
+  
         setOrders(orders.map(order => 
           order.id === currentOrder.id 
             ? { 
@@ -286,7 +289,7 @@ const VendorOrders = () => {
               } 
             : order
         ));
-
+  
         toast({
           title: 'Order Confirmed',
           description: 'Order has been successfully picked up.',
@@ -294,7 +297,7 @@ const VendorOrders = () => {
           duration: 3000,
           isClosable: true,
         });
-
+  
         setIsQRScannerOpen(false);
         setCurrentOrder(null);
       } else {

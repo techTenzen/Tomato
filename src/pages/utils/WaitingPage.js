@@ -285,11 +285,11 @@ const OrderWaitingPage = () => {
                   p={6}
                 >
                   <QRCodeSVG
-                    value={`order-pickup:${orderId}`} 
-                    size={256} 
-                    level={'H'} 
-                    includeMargin={true}
-                  />
+  value={`order-pickup:${orderId}`} 
+  size={256} 
+  level={'H'} 
+  includeMargin={true}
+/>
                   <Text 
                     mt={4} 
                     textAlign="center" 
