@@ -44,7 +44,7 @@ const OrderWaitingPage = () => {
   const [orderDetails, setOrderDetails] = useState(null);
   
   const navigate = useNavigate();
-  const { orderid } = useParams(); // Use useParams to get orderid from URL
+  const { orderid } = useParams();
   const firestore = getFirestore();
   const auth = getAuth();
 
@@ -52,6 +52,9 @@ const OrderWaitingPage = () => {
   const headingSize = useBreakpointValue({ base: 'lg', md: 'xl' });
   const containerPadding = useBreakpointValue({ base: 4, md: 8 });
   const iconSize = useBreakpointValue({ base: 8, md: 10 });
+
+  // Generate unique QR code value
+  const qrCodeValue = `order-pickup:${orderid}`;
 
   useEffect(() => {
     const checkOrderAuthorization = async () => {
@@ -260,8 +263,9 @@ const OrderWaitingPage = () => {
           colorScheme="blue" 
           onClick={handleOpenQRModal}
           width="full"
+          isDisabled={!isReadyForPickup}
         >
-          Show Order QR Code when order is ready to pickup.
+          Show Order QR Code
         </Button>
 
         <Modal isOpen={isQRModalOpen} onClose={handleCloseQRModal}>
@@ -270,7 +274,7 @@ const OrderWaitingPage = () => {
             <ModalHeader>Order QR Code</ModalHeader>
             <ModalCloseButton />
             <ModalBody display="flex" justifyContent="center" py={6}>
-              <QRCodeSVG value={orderid} size={256} />
+              <QRCodeSVG value={qrCodeValue} size={256} />
             </ModalBody>
           </ModalContent>
         </Modal>

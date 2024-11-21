@@ -156,9 +156,9 @@ const VendorOrders = () => {
   
     try {
       const scannedValue = result[0]?.rawValue;
-      const expectedPrefix = `order-pickup:${currentOrder.id}`;
+      const expectedValue = `order-pickup:${currentOrder.id}`;
       
-      if (scannedValue === expectedPrefix) {
+      if (scannedValue === expectedValue) {
         await updateDoc(doc(firestore, 'orders', currentOrder.id), {
           status: 'picked_up',
           pickedUpAt: new Date()
