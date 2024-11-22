@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import SalesAnalytics from '../../Components/sales/SaleAnalytics';
 import {
   Container,
   VStack,
@@ -307,6 +308,7 @@ const VendorOrders = () => {
               <Text color="gray.600">
                 Showing {filteredOrders.length} orders
               </Text>
+              <SalesAnalytics orders={orders} />
             </HStack>
           </Box>
 
