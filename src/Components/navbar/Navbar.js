@@ -34,7 +34,7 @@ const Navbar = () => {
   const [user, setUser] = useState(null);
   const [scrolled, setScrolled] = useState(false);
   const [cartCount, setCartCount] = useState(0);
-  const [shopStatus, setShopStatus] = useState(true); // Add shop status state
+  const [shopStatus, setShopStatus] = useState(true);
   const navigate = useNavigate();
   const auth = getAuth(app);
   const firestore = getFirestore(app);
@@ -68,7 +68,6 @@ const Navbar = () => {
     return () => window.removeEventListener('cartUpdate', loadCartCount);
   }, []);
 
-  // Add function to handle shop status toggle
   const handleShopStatusToggle = async () => {
     try {
       const shopRef = doc(firestore, 'shops', user.shopId);
@@ -205,10 +204,16 @@ const Navbar = () => {
           {user?.role === 'vendor' && (
             <>
               <MenuItem onClick={() => {
-                navigate(`/vendor/items`);
+                navigate('/vendor/dashboard');  // Updated to match VendorDashboard route
                 onClose();
               }}>
                 Vendor Dashboard
+              </MenuItem>
+              <MenuItem onClick={() => {
+                navigate(`/vendor/items`);
+                onClose();
+              }}>
+                Manage Items
               </MenuItem>
               <MenuItem onClick={handleShopStatusToggle}>
                 {shopStatus ? 'Close Shop' : 'Open Shop'}
@@ -312,10 +317,16 @@ const Navbar = () => {
                           {user.role === 'vendor' && (
                             <>
                               <Button onClick={() => {
-                                navigate(`/vendor/items`);
+                                navigate('/vendor/dashboard');  // Updated route
                                 onClose();
                               }} w="full">
                                 Vendor Dashboard
+                              </Button>
+                              <Button onClick={() => {
+                                navigate(`/vendor/items`);
+                                onClose();
+                              }} w="full">
+                                Manage Items
                               </Button>
                               <Button 
                                 onClick={handleShopStatusToggle} 

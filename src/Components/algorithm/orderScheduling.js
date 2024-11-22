@@ -56,7 +56,14 @@ export class OrderScheduler {
     this.config = { ...ORDER_CONSTANTS, ...config };
     this.preparationTimes = new Map();
   }
-
+   
+  scheduleOrders() {
+    // Example logic: prioritize orders based on 'priority' property
+    return this.orders.sort((a, b) => {
+      const priorityLevels = { high: 3, medium: 2, low: 1 };
+      return priorityLevels[b.priority] - priorityLevels[a.priority];
+    });
+  }
   /**
    * Validates the order data structure
    * @private

@@ -18,6 +18,7 @@ import OrderWaitingPage from './pages/utils/WaitingPage';
 import Footer from './Components/footer/Footer';
 import OrderPickupConfirmation from './Components/order/OrderConfirmation';
 import UserProfile from './pages/user/UserProfile';
+import VendorDashboard from './pages/vendors/workflow';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const [user, setUser] = useState(null);
@@ -66,6 +67,16 @@ function App() {
           <Route path="/order-confirmation" element={<OrderPickupConfirmation />} />
           <Route path="/Profile" element={<UserProfile />} />
           
+          {/* New Vendor Dashboard Route with Protection */}
+          <Route 
+            path="/vendor/dashboard" 
+            element={
+              <ProtectedRoute requiredRole="vendor">
+                <VendorDashboard />
+              </ProtectedRoute>
+            } 
+          />
+
           <Route
             path="/main"
             element={
