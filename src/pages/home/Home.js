@@ -20,7 +20,9 @@ import {
   ModalHeader,
   ModalCloseButton,
   ModalBody,
-  ModalFooter
+  ModalFooter,
+  Heading,
+  Badge
 } from '@chakra-ui/react';
 import { Search2Icon } from '@chakra-ui/icons';
 import { FaMapMarkerAlt, FaUtensils, FaGift, FaShoppingBag, FaEye } from 'react-icons/fa';
@@ -42,36 +44,72 @@ import pic2 from "../../Assets/WhatsApp Image 2024-11-20 at 10.00.18 PM.jpeg"
 import pic3 from "../../Assets/WhatsApp Image 2024-11-20 at 9.59.19 PM.jpeg"
 import pic4 from "../../Assets/Untitled design (1) (1).png"
 
-// Animated components
 const MotionBox = chakra(motion.div);
 const MotionVStack = chakra(motion.div);
 
-// Food Category Component
 const FoodCategory = ({ icon, title, onClick }) => (
   <MotionVStack
-    spacing={2}
+    spacing={3}
     align="center"
-    p={4}
-    borderRadius="lg"
+    p={6}
+    borderRadius="xl"
     bg="white"
-    whileHover={{
-      scale: 1.05,
-      transition: { duration: 0.2 }
-    }}
+    whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
     whileTap={{ scale: 0.95 }}
     cursor="pointer"
-    boxShadow="sm"
+    boxShadow="lg"
     _hover={{
-      boxShadow: 'md',
-      bg: 'green.50'
+      boxShadow: 'xl',
+      bg: 'green.50',
+      transform: 'translateY(-4px)',
+      transition: 'all 0.3s ease'
     }}
     onClick={onClick}
   >
-    <Icon as={icon} boxSize={{ base: 8, md: 10 }} color="green.500" />
-    <Text fontWeight="medium" textAlign="center" fontSize={{ base: 'md', md: 'lg' }}>
+    <Icon as={icon} boxSize={{ base: 10, md: 12 }} color="green.500" />
+    <Text 
+      fontWeight="semibold" 
+      textAlign="center" 
+      fontSize={{ base: 'lg', md: 'xl' }}
+      color="gray.700"
+    >
       {title}
     </Text>
   </MotionVStack>
+);
+
+const OrderCard = ({ order, onViewDetails }) => (
+  <Box
+    p={4}
+    bg="white"
+    borderRadius="xl"
+    boxShadow="md"
+    _hover={{ boxShadow: 'lg', transform: 'translateY(-2px)' }}
+    transition="all 0.3s ease"
+  >
+    <Flex justify="space-between" align="center">
+      <VStack align="start" spacing={2}>
+        <Text fontWeight="bold" fontSize="lg">Order #{order.id.slice(-6)}</Text>
+        <Badge 
+          colorScheme={
+            order.status === 'completed' ? 'green' : 
+            order.status === 'processing' ? 'orange' : 
+            'blue'
+          }
+        >
+          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+        </Badge>
+      </VStack>
+      <Button
+        colorScheme="green"
+        size="sm"
+        onClick={() => onViewDetails(order.id)}
+        leftIcon={<FaEye />}
+      >
+        View Details
+      </Button>
+    </Flex>
+  </Box>
 );
 
 const Home = () => {
@@ -85,9 +123,7 @@ const Home = () => {
   useEffect(() => {
     const fetchActiveOrders = async () => {
       try {
-        // Get the logged-in user from localStorage
         const user = JSON.parse(localStorage.getItem('user'));
-        
         if (!user) {
           setLoading(false);
           return;
@@ -100,7 +136,6 @@ const Home = () => {
           where('status', 'in', ['pending', 'processing', 'completed'])
         );
         
-        // Real-time listener for active orders
         const unsubscribe = onSnapshot(activeOrdersQuery, (snapshot) => {
           const orders = snapshot.docs.map(doc => ({
             id: doc.id,
@@ -110,7 +145,6 @@ const Home = () => {
           setLoading(false);
         });
 
-        // Cleanup subscription on unmount
         return () => unsubscribe();
       } catch (error) {
         console.error('Error fetching active orders:', error);
@@ -122,18 +156,12 @@ const Home = () => {
   }, [firestore]);
 
   const handleOrderClick = () => {
-    if (location.trim()) {
-      navigate('/main');
-    }
+    if (location.trim()) navigate('/main');
   };
 
-  const handleCategoryClick = () => {
-    navigate('/main');
-  };
+  const handleCategoryClick = () => navigate('/main');
 
-  const handleViewActiveOrders = () => {
-    setIsOrderModalOpen(true);
-  };
+  const handleViewActiveOrders = () => setIsOrderModalOpen(true);
 
   const handleOrderDetailsNavigation = (orderId) => {
     navigate(`/order-waiting/${orderId}`);
@@ -141,8 +169,8 @@ const Home = () => {
   };
 
   const bgGradient = useColorModeValue(
-    'linear(to-r, teal.100, teal.50)',
-    'linear(to-r, teal.800, teal.700)'
+    'linear(to-br, green.50, teal.50, blue.50)',
+    'linear(to-br, green.900, teal.900, blue.900)'
   );
 
   const foodCategories = [
@@ -158,18 +186,14 @@ const Home = () => {
     slidesToScroll: 1,
     autoplay: true,
     autoplaySpeed: 3000,
-    cssEase: "linear"
+    cssEase: "linear",
+    arrows: false
   };
 
   if (loading) {
     return (
-      <Flex 
-        justifyContent="center" 
-        alignItems="center" 
-        height="100vh" 
-        bg={bgGradient}
-      >
-        <Spinner size="xl" color="green.500" />
+      <Flex justify="center" align="center" h="100vh" bg={bgGradient}>
+        <Spinner size="xl" color="green.500" thickness="4px" />
       </Flex>
     );
   }
@@ -177,35 +201,42 @@ const Home = () => {
   return (
     <Box
       bg={bgGradient}
-      minHeight="100vh"
-      display="flex"
-      alignItems="center"
-      pt={{ base: 10, md: 0 }}
-      px={{ base: 4, md: 0 }}
-      mb={0}
+      minH="100vh"
+      py={{ base: 8, md: 16 }}
+      px={{ base: 4, md: 8 }}
     >
       <Container maxW="container.xl">
-        {/* Active Orders Banner */}
         {activeOrders.length > 0 && (
-          <Box 
-            bg="green.50" 
-            p={3} 
-            borderRadius="lg" 
-            mb={4} 
-            boxShadow="md"
+          <Box
+            bg="white"
+            p={4}
+            borderRadius="2xl"
+            mb={8}
+            boxShadow="xl"
+            border="1px"
+            borderColor="green.100"
           >
-            <Flex alignItems="center" justifyContent="space-between">
-              <Flex alignItems="center">
-                <Icon as={FaShoppingBag} mr={3} color="green.500" />
-                <Text fontWeight="bold" color="green.700">
-                  {activeOrders.length} Active Order{activeOrders.length > 1 ? 's' : ''}
-                </Text>
-              </Flex>
-              <Button 
-                colorScheme="green" 
-                size="sm" 
+            <Flex align="center" justify="space-between">
+              <HStack spacing={4}>
+                <Icon as={FaShoppingBag} boxSize={6} color="green.500" />
+                <VStack align="start" spacing={0}>
+                  <Text fontSize="lg" fontWeight="bold" color="gray.700">
+                    {activeOrders.length} Active Order{activeOrders.length > 1 ? 's' : ''}
+                  </Text>
+                  <Text fontSize="sm" color="gray.500">
+                    Track your orders in real-time
+                  </Text>
+                </VStack>
+              </HStack>
+              <Button
+                colorScheme="green"
+                size="lg"
                 onClick={handleViewActiveOrders}
                 leftIcon={<FaEye />}
+                _hover={{
+                  transform: 'translateY(-2px)',
+                  boxShadow: 'lg'
+                }}
               >
                 View Orders
               </Button>
@@ -214,74 +245,81 @@ const Home = () => {
         )}
 
         <Flex
-          flexDirection={{ base: 'column', md: 'row' }}
-          alignItems="center"
-          justifyContent="space-between"
-          gap={{ base: 8, md: 12 }}
+          direction={{ base: 'column', lg: 'row' }}
+          align="center"
+          justify="space-between"
+          gap={{ base: 12, lg: 16 }}
         >
-          {/* Left Section: Text & Search */}
           <MotionBox
-            w={{ base: 'full', md: '50%' }}
+            w={{ base: 'full', lg: '50%' }}
             initial={{ opacity: 0, x: -50 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <VStack spacing={6} align="start" w="full">
-              <Text
-                fontSize={{ base: '3xl', md: '5xl' }}
-                fontWeight="extrabold"
+            <VStack spacing={8} align="start" w="full">
+              <Heading
+                fontSize={{ base: '4xl', md: '5xl', lg: '6xl' }}
+                fontWeight="black"
                 lineHeight="shorter"
                 color="teal.800"
-                mb={0}
+                letterSpacing="tight"
               >
                 Order right from your table!
-              </Text>
+              </Heading>
 
-              {/* Carousel Section */}
-              <Box w="full" borderRadius="lg" overflow="hidden">
+              <Box w="full" borderRadius="2xl" overflow="hidden" boxShadow="2xl">
                 <Slider {...carouselSettings}>
-                  <Box>
-                    <Image src={pic1} alt="Delicious Meal" />
-                  </Box>
-                  <Box>
-                    <Image src={pic2} alt="Fast Delivery" />
-                  </Box>
-                  <Box>
-                    <Image src={pic3} alt="Exclusive Offers" />
-                  </Box>
+                  {[pic1, pic2, pic3].map((pic, index) => (
+                    <Box key={index} position="relative" pb="56.25%">
+                      <Image
+                        src={pic}
+                        alt={`Slide ${index + 1}`}
+                        position="absolute"
+                        top={0}
+                        left={0}
+                        w="full"
+                        h="full"
+                        objectFit="cover"
+                      />
+                    </Box>
+                  ))}
                 </Slider>
               </Box>
 
-              {/* Location & Search */}
               <HStack
                 w="full"
                 bg="white"
-                p={2}
+                p={3}
                 borderRadius="full"
-                boxShadow="md"
+                boxShadow="xl"
+                spacing={4}
               >
-                <Icon as={FaMapMarkerAlt} ml={3} color="green.500" />
+                <Icon as={FaMapMarkerAlt} boxSize={5} ml={4} color="green.500" />
                 <Input
                   placeholder="Enter your location"
                   variant="unstyled"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  pl={2}
-                  fontSize={{ base: 'sm', md: 'md' }}
+                  fontSize="lg"
+                  _placeholder={{ color: 'gray.400' }}
                 />
                 <Button
                   borderRadius="full"
                   colorScheme="green"
                   rightIcon={<Search2Icon />}
                   onClick={handleOrderClick}
-                  size={{ base: 'sm', md: 'md' }}
+                  size="lg"
+                  px={8}
+                  _hover={{
+                    transform: 'translateY(-2px)',
+                    boxShadow: 'lg'
+                  }}
                 >
                   Search
                 </Button>
               </HStack>
 
-              {/* Food Categories */}
-              <SimpleGrid columns={{ base: 2, md: 3 }} spacing={4} w="full" mt={6}>
+              <SimpleGrid columns={{ base: 2 }} spacing={6} w="full">
                 {foodCategories.map((category, index) => (
                   <FoodCategory
                     key={index}
@@ -294,10 +332,8 @@ const Home = () => {
             </VStack>
           </MotionBox>
 
-          {/* Right Section: Image */}
           <MotionBox
-            w={{ base: 'full', md: '50%' }}
-            display={{ base: 'block', md: 'block' }}
+            w={{ base: 'full', lg: '45%' }}
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
@@ -305,54 +341,40 @@ const Home = () => {
             <Image
               src={pic4}
               alt="Food Delivery"
-              borderRadius="2xl"
+              borderRadius="3xl"
               boxShadow="2xl"
-              objectFit="cover"
               w="full"
-              h={{ base: "200px", md: "auto" }}
+              h="auto"
+              objectFit="cover"
             />
           </MotionBox>
         </Flex>
 
-        {/* Active Orders Modal */}
-        <Modal 
-          isOpen={isOrderModalOpen} 
+        <Modal
+          isOpen={isOrderModalOpen}
           onClose={() => setIsOrderModalOpen(false)}
-          size="md"
+          size="xl"
+          motionPreset="slideInBottom"
         >
-          <ModalOverlay />
-          <ModalContent>
-            <ModalHeader>Your Active Orders</ModalHeader>
+          <ModalOverlay bg="blackAlpha.300" backdropFilter="blur(10px)" />
+          <ModalContent borderRadius="xl" mx={4}>
+            <ModalHeader fontSize="2xl" fontWeight="bold">Your Active Orders</ModalHeader>
             <ModalCloseButton />
             <ModalBody>
-              {activeOrders.map((order) => (
-                <Flex 
-                  key={order.id} 
-                  justifyContent="space-between" 
-                  alignItems="center"
-                  mb={4}
-                  p={3}
-                  borderRadius="md"
-                  bg="gray.50"
-                >
-                  <VStack align="start" spacing={1}>
-                    <Text fontWeight="bold">Order #{order.id.slice(-6)}</Text>
-                    <Text color="gray.500" fontSize="sm">
-                      Status: {order.status}
-                    </Text>
-                  </VStack>
-                  <Button 
-                    colorScheme="green" 
-                    size="sm"
-                    onClick={() => handleOrderDetailsNavigation(order.id)}
-                  >
-                    View Details
-                  </Button>
-                </Flex>
-              ))}
+              <VStack spacing={4}>
+                {activeOrders.map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onViewDetails={handleOrderDetailsNavigation}
+                  />
+                ))}
+              </VStack>
             </ModalBody>
             <ModalFooter>
-              <Button onClick={() => setIsOrderModalOpen(false)}>Close</Button>
+              <Button onClick={() => setIsOrderModalOpen(false)} size="lg">
+                Close
+              </Button>
             </ModalFooter>
           </ModalContent>
         </Modal>

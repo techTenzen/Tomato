@@ -17,6 +17,7 @@ import { getCurrentUser } from './Components/firebase/Firebase';
 import OrderWaitingPage from './pages/utils/WaitingPage';
 import Footer from './Components/footer/Footer';
 import OrderPickupConfirmation from './Components/order/OrderConfirmation';
+import UserProfile from './pages/user/UserProfile';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const [user, setUser] = useState(null);
@@ -63,6 +64,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/order-waiting/:orderid" element={<OrderWaitingPage />} />
           <Route path="/order-confirmation" element={<OrderPickupConfirmation />} />
+          <Route path="/Profile" element={<UserProfile />} />
           
           <Route
             path="/main"
@@ -121,7 +123,7 @@ function App() {
             }
           />
         </Routes>
-        
+        <Footer/>
       </BrowserRouter>
     </ChakraProvider>
   );
