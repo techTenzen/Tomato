@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   VStack,
@@ -20,7 +20,8 @@ import {
   ModalCloseButton,
   ModalBody,
   ModalFooter,
-  Flex
+  Flex,
+  Badge
 } from '@chakra-ui/react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { getFirestore, collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
@@ -38,36 +39,28 @@ const VendorOrders = () => {
   const [delayNotifications, setDelayNotifications] = useState([]);
   const [qrScannerState, setQRScannerState] = useState({ isOpen: false, order: null });
   const [lastScannedOrderId, setLastScannedOrderId] = useState(null);
+  const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
   
   const toast = useToast();
   const firestore = getFirestore();
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  useEffect(() => {
-    if (orders.length > 0) {
-      const scheduler = new OrderScheduler(orders);
-      const delayedOrders = scheduler.detectPotentialDelays();
-      const notifications = generateDelayNotifications(delayedOrders);
-      setDelayNotifications(notifications);
-    }
-  }, [orders]);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const user = JSON.parse(localStorage.getItem('user'));
       if (!user) throw new Error('No user found');
+      
       const ordersRef = collection(firestore, 'orders');
       const q = query(ordersRef, where('shopId', '==', user.shopId));
       const snapshot = await getDocs(q);
+      
       const ordersList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate()
       }));
+      
       setOrders(ordersList.sort((a, b) => b.createdAt - a.createdAt));
+      setLastUpdateTime(new Date());
       setLoading(false);
     } catch (error) {
       setError(error.message);
@@ -80,7 +73,30 @@ const VendorOrders = () => {
         isClosable: true,
       });
     }
-  };
+  }, [firestore, toast]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  // Auto-reload setup
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchOrders();
+    }, 30000); // Reload every 30 seconds
+
+    return () => clearInterval(intervalId);
+  }, [fetchOrders]);
+
+  useEffect(() => {
+    if (orders.length > 0) {
+      const scheduler = new OrderScheduler(orders);
+      const delayedOrders = scheduler.detectPotentialDelays();
+      const notifications = generateDelayNotifications(delayedOrders);
+      setDelayNotifications(notifications);
+    }
+  }, [orders]);
 
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
@@ -94,10 +110,8 @@ const VendorOrders = () => {
       }
       await updateDoc(doc(firestore, 'orders', orderId), updateData);
       
-      // Update local state for orders
-      setOrders(orders.map(order => 
-        order.id === orderId ? { ...order, status: newStatus, ...(newStatus === 'completed' && { pickupCode: updateData.pickupCode, completedAt: updateData.completedAt }) } : order
-      ));
+      // Fetch fresh data after update
+      await fetchOrders();
       
       toast({
         title: 'Status Updated',
@@ -126,10 +140,7 @@ const VendorOrders = () => {
     if (!currentOrder) return;
     try {
       await updateOrderStatus(currentOrder.id, 'completed');
-      
-      // Open the QR Scanner after marking as ready
       openQRScanner(currentOrder);
-
       setIsConfirmModalOpen(false);
     } catch (error) {
       toast({
@@ -159,12 +170,12 @@ const VendorOrders = () => {
       const expectedValue = `order-pickup:${scanningOrder.id}`;
       
       if (scannedValue === expectedValue) {
-        await updateDoc(doc(firestore, 'orders', scanningOrder.id), { status: 'picked_up', pickedUpAt: new Date() });
+        await updateDoc(doc(firestore, 'orders', scanningOrder.id), {
+          status: 'picked_up',
+          pickedUpAt: new Date()
+        });
         
-        // Update local state for orders
-        setOrders(orders.map(order =>
-          order.id === scanningOrder.id ? { ...order, status: 'picked_up', pickedUpAt: new Date() } : order
-        ));
+        await fetchOrders(); // Fetch fresh data after update
         
         toast({
           title: 'Order Confirmed',
@@ -216,11 +227,7 @@ const VendorOrders = () => {
         pickedUpAt: new Date() 
       });
       
-      // Update local state for orders
-      setOrders(orders.map(order =>
-        order.id === orderId ? { ...order, status: 'picked_up', pickedUpAt: new Date() } : order
-      ));
-
+      await fetchOrders(); // Fetch fresh data after update
       setLastScannedOrderId(orderId);
       
       toast({
@@ -243,7 +250,7 @@ const VendorOrders = () => {
 
   const filteredOrders = orders.filter(order => filter === 'all' ? true : order.status === filter);
 
-  if (loading) {
+  if (loading && orders.length === 0) {
     return (
       <Container maxW="container.xl" centerContent py={8}>
         <Spinner size="xl" />
@@ -266,20 +273,29 @@ const VendorOrders = () => {
     <Container maxW="container.xl" py={8}>
       <Flex>
         <VStack spacing={8} align="stretch" flex={2} mr={4}>
-          {delayNotifications.length > 0 && (
-            <Box>
-              {delayNotifications.map((notification, index) => (
-                <Alert status="warning" key={index} mb={2}>
-                  <AlertIcon />
-                  {notification.message}
-                </Alert>
-              ))}
-            </Box>
-          )}
-          
           <Box>
-            <Heading size="xl" mb={4}>Order Management</Heading>
-            <HStack spacing={4}>
+            <HStack justify="space-between" mb={4}>
+              <Heading size="xl">Order Management</Heading>
+              <Box>
+                <Text fontSize="sm" color="gray.500">
+                  Last updated: {lastUpdateTime.toLocaleTimeString()}
+                </Text>
+                {loading && <Badge ml={2} colorScheme="blue">Refreshing...</Badge>}
+              </Box>
+            </HStack>
+            
+            {delayNotifications.length > 0 && (
+              <Box mb={4}>
+                {delayNotifications.map((notification, index) => (
+                  <Alert status="warning" key={index} mb={2}>
+                    <AlertIcon />
+                    {notification.message}
+                  </Alert>
+                ))}
+              </Box>
+            )}
+
+            <HStack spacing={4} mb={4}>
               <Select value={filter} onChange={(e) => setFilter(e.target.value)} width="200px">
                 <option value="all">All Orders</option>
                 <option value="pending">Pending</option>
@@ -288,7 +304,9 @@ const VendorOrders = () => {
                 <option value="cancelled">Cancelled</option>
                 <option value="picked_up">Picked Up</option>
               </Select>
-              <Text color="gray.600"> Showing {filteredOrders.length} orders </Text>
+              <Text color="gray.600">
+                Showing {filteredOrders.length} orders
+              </Text>
             </HStack>
           </Box>
 
@@ -371,8 +389,6 @@ const VendorOrders = () => {
               onError={(error) => console.error(error?.message)} 
             />
           </Box>
-
-          
         </VStack>
       </Flex>
     </Container>

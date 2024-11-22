@@ -21,22 +21,25 @@ import {
   useDisclosure,
   VStack,
   HStack,
-  Badge
+  Badge,
+  useToast
 } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getAuth, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, getFirestore } from 'firebase/firestore';
+import { doc, getDoc, getFirestore, updateDoc } from 'firebase/firestore';
 import { app } from '../firebase/Firebase';
 import { Menu as MenuIcon, ShoppingCart } from 'lucide-react';
 
 const Navbar = () => {
   const [user, setUser] = useState(null);
   const [scrolled, setScrolled] = useState(false);
-  const [cartCount, setCartCount] = useState(0); // Add cart count state
+  const [cartCount, setCartCount] = useState(0);
+  const [shopStatus, setShopStatus] = useState(true); // Add shop status state
   const navigate = useNavigate();
   const auth = getAuth(app);
   const firestore = getFirestore(app);
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const toast = useToast();
   
   const isMobile = useBreakpointValue({ base: true, md: false });
 
@@ -54,7 +57,6 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Load cart count from localStorage or your state management solution
   useEffect(() => {
     const loadCartCount = () => {
       const cartItems = JSON.parse(localStorage.getItem('cartItems')) || [];
@@ -62,10 +64,36 @@ const Navbar = () => {
     };
 
     loadCartCount();
-    // Add event listener for cart updates if you have one
     window.addEventListener('cartUpdate', loadCartCount);
     return () => window.removeEventListener('cartUpdate', loadCartCount);
   }, []);
+
+  // Add function to handle shop status toggle
+  const handleShopStatusToggle = async () => {
+    try {
+      const shopRef = doc(firestore, 'shops', user.shopId);
+      const newStatus = !shopStatus;
+      await updateDoc(shopRef, {
+        isOpen: newStatus
+      });
+      setShopStatus(newStatus);
+      toast({
+        title: `Shop ${newStatus ? 'Opened' : 'Closed'}`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error updating shop status:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update shop status',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
@@ -74,6 +102,15 @@ const Navbar = () => {
           const userDocRef = doc(firestore, 'users', authUser.uid);
           const userDoc = await getDoc(userDocRef);
           const userData = userDoc.data();
+
+          // If user is a vendor, fetch shop status
+          if (userData?.role === 'vendor' && userData?.shopId) {
+            const shopRef = doc(firestore, 'shops', userData.shopId);
+            const shopDoc = await getDoc(shopRef);
+            if (shopDoc.exists()) {
+              setShopStatus(shopDoc.data().isOpen ?? true);
+            }
+          }
 
           const fullUserData = {
             uid: authUser.uid,
@@ -166,12 +203,17 @@ const Navbar = () => {
             </MenuItem>
           )}
           {user?.role === 'vendor' && (
-            <MenuItem onClick={() => {
-              navigate(`/vendor/items`);
-              onClose();
-            }}>
-              Vendor Dashboard
-            </MenuItem>
+            <>
+              <MenuItem onClick={() => {
+                navigate(`/vendor/items`);
+                onClose();
+              }}>
+                Vendor Dashboard
+              </MenuItem>
+              <MenuItem onClick={handleShopStatusToggle}>
+                {shopStatus ? 'Close Shop' : 'Open Shop'}
+              </MenuItem>
+            </>
           )}
           <MenuItem onClick={handleLogout}>Logout</MenuItem>
         </MenuList>
@@ -268,12 +310,21 @@ const Navbar = () => {
                             </Button>
                           )}
                           {user.role === 'vendor' && (
-                            <Button onClick={() => {
-                              navigate(`/vendor/items`);
-                              onClose();
-                            }} w="full">
-                              Vendor Dashboard
-                            </Button>
+                            <>
+                              <Button onClick={() => {
+                                navigate(`/vendor/items`);
+                                onClose();
+                              }} w="full">
+                                Vendor Dashboard
+                              </Button>
+                              <Button 
+                                onClick={handleShopStatusToggle} 
+                                w="full"
+                                colorScheme={shopStatus ? "red" : "green"}
+                              >
+                                {shopStatus ? 'Close Shop' : 'Open Shop'}
+                              </Button>
+                            </>
                           )}
                           <Button onClick={handleLogout} w="full" colorScheme="red">
                             Logout

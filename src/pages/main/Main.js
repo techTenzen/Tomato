@@ -33,6 +33,7 @@ const ShopCard = ({ shop }) => (
       height="100%"
       display="flex"
       flexDirection="column"
+      position="relative"  // Add this for absolute positioning of closed status
     >
       <Image
         src={shop.imageUrl}
@@ -41,6 +42,31 @@ const ShopCard = ({ shop }) => (
         w="100%"
         objectFit="cover"
       />
+      {!shop.isOpen && (
+        <Box
+          position="absolute"
+          top="0"
+          left="0"
+          right="0"
+          bottom="0"
+          bg="blackAlpha.600"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Text
+            color="white"
+            fontSize="xl"
+            fontWeight="bold"
+            textAlign="center"
+            p={4}
+            bg="blackAlpha.700"
+            borderRadius="md"
+          >
+            Closed at the moment
+          </Text>
+        </Box>
+      )}
       <Box 
         p={4} 
         flex="1" 
